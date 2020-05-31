@@ -1,0 +1,22 @@
+Commandline Arguments:
+
+1. Take user's name as command line argument, and greet them.
+   e.g. hello.exe Rutwik
+   output should be: Hello Rutwik
+
+2. Take operation and then multiple numbers as command line arguments and return the respective result.
+   e.g. calc.exe + 10 20 30
+   output should be 10+20+30: 60
+
+   e.g. calc.exe * 2 4 3
+   output should be 2*4*3: 24
+   
+   hint: you can compare characters using == operator
+   e.g. '+' == argv[1][0] (this is character comparision)
+
+3. Take one float as command line argument, and consider is as radius of circle. Print the area of that circle.
+   e.g. circle.exe 12.25
+   output should be: 471.42134375
+
+
+
