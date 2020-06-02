@@ -13,11 +13,11 @@ int main(void)
 	// code
 	printf("\n\n");
 	printf("Enter An Integer: ");
-	scanf("%d", &rmc_a);
+	scanf("%u", &rmc_a);
 
 	printf("\n\n");
 	printf("By how many bits do you want to shift A = %d to right? : ", rmc_a);
-	scanf("%d", &rmc_bits);
+	scanf("%u", &rmc_bits);
 
 	printf("\n\n\n\n");
 	rmc_result = rmc_a >> rmc_bits;

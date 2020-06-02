@@ -12,7 +12,7 @@ int main(void)
 	// code
 	printf("\n\n");
 	printf("Enter First Integer: ");
-	scanf("%d", &rmc_a);
+	scanf("%u", &rmc_a);
 
 	printf("\n\n\n\n");
 	rmc_result = ~rmc_a;
