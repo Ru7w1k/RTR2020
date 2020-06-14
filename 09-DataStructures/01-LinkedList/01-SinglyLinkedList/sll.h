@@ -4,7 +4,6 @@ typedef struct _NODE {
 
 	int iData;
 	struct _NODE *next;
-	struct _NODE *prev;
 
 } NODE, *LPNODE;
 

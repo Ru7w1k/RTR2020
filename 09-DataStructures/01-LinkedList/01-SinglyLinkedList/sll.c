@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "sll.h"
 
@@ -8,15 +9,11 @@ void InsertHead(LPNODE *head, int data)
 	LPNODE node = (LPNODE)malloc(sizeof(NODE));
 	node->iData = data;
 	node->next = node;
-	node->prev = node;
 
 	/* Append at Head */
 	if (*head)
 	{
-		node->prev = (*head)->prev;
 		node->next = (*head);
-		(*head)->prev->next = node;
-		(*head)->prev = node;
 	}
 
 	/* Update the NEW head */
@@ -30,7 +27,6 @@ void InsertTail(LPNODE *head, int data)
 	LPNODE node = (LPNODE)malloc(sizeof(NODE));
 	node->iData = data;
 	node->next = node;
-	node->prev = node;
 
 	/* Append at Tail */
 	if (!(*head))
@@ -39,38 +35,32 @@ void InsertTail(LPNODE *head, int data)
 	}
 	else
 	{
-		node->prev = (*head)->prev;
-		node->next = (*head);
-		(*head)->prev->next = node;
-		(*head)->prev = node;
-	}
+		LPNODE tmp = node;
+		while (tmp->next != NULL)
+		{
+			tmp = tmp->next;
+		}
 
+		tmp->next = node;
+	}
 }
 
 
 void DeleteHead(LPNODE *head)
 {
-	LPNODE newHead;
+	LPNODE tmp;
 
+	/* Head is NULL i.e. link list is empty */
 	if (!(*head)) return;
 
-	/* break links with head node */
-	(*head)->next->prev = (*head)->prev;
-	(*head)->prev->next = (*head)->next;
+	/* store current head in temp, and delete current head */
+	tmp = *head;
 
-	newHead = (*head)->next;
+	/* move head to next of head */
+	(*head) = (*head)->next();
 
-	if (*head == newHead)
-	{
-		free(*head);
-		*head = NULL;
-	}
-	else
-	{
-		free(*head);
-		*head = newHead;
-	}
-
+	/* free old head node */
+	free(*tmp); 
 }
 
 
@@ -78,6 +68,7 @@ void DeleteTail(LPNODE *head)
 {
 	LPNODE tailNode;
 
+	/* Head is NULL i.e. link list is empty */
 	if (!(*head)) return;
 
 	tailNode = (*head)->prev;
@@ -102,6 +93,7 @@ void DeleteTail(LPNODE *head)
 
 void PrintList(LPNODE *head)
 {
+	/* Head is NULL i.e. link list is empty */
 	if (!(*head))
 	{
 		printf("\n\nLinked List: <empty>");
