@@ -10,6 +10,9 @@ WINDOWPLACEMENT wpPrev = { sizeof(WINDOWPLACEMENT) };
 bool gbFullscreen = false;
 HWND ghwnd = NULL;
 
+int gWidth  = 800;
+int gHeight = 600;
+
 
 // WinMain()
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLine, int iCmdShow)
@@ -46,10 +49,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 	hwnd = CreateWindow(szAppName,
 		TEXT("Fullscreen: Method 02"),
 		WS_OVERLAPPEDWINDOW,
-		(width / 2) - 400,
-		(height / 2) - 300,
-		800,
-		600,
+		(width / 2) - (gWidth / 2),
+		(height / 2) - (gHeight / 2),
+		gWidth,
+		gHeight,
 		NULL,
 		NULL,
 		hInstance,
@@ -118,8 +121,8 @@ void ToggleFullscreen(void)
 		GetMonitorInfo(MonitorFromWindow(ghwnd, MONITORINFOF_PRIMARY), &mi);
 
 		dm.dmSpecVersion = DM_SPECVERSION;
-		dm.dmPelsWidth = mi.rcMonitor.right - mi.rcMonitor.left;
-		dm.dmPelsHeight = mi.rcMonitor.bottom - mi.rcMonitor.top;
+		dm.dmPelsWidth = gWidth; // mi.rcMonitor.right - mi.rcMonitor.left;
+		dm.dmPelsHeight = gHeight; // mi.rcMonitor.bottom - mi.rcMonitor.top;
 		dm.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_SPECVERSION;
 
 		lResult = ChangeDisplaySettings(&dm, CDS_FULLSCREEN);
@@ -134,8 +137,8 @@ void ToggleFullscreen(void)
 				SetWindowPos(ghwnd, HWND_TOP,
 					0,
 					0,
-					mi.rcMonitor.right - mi.rcMonitor.left,
-					mi.rcMonitor.bottom - mi.rcMonitor.top,
+					gWidth,
+					gHeight,
 					SWP_NOZORDER | SWP_FRAMECHANGED);
 			}
 		}
