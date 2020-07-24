@@ -143,7 +143,7 @@ const GLchar *fsRaytracerSourceCode = (GLchar *)
     "       float diff = clamp(dot(N, L), 0.0, 1.0); \n" \
     "       float spec = pow(clamp(dot(R, N), 0.0, 1.0), 260.0); \n" \
 
-    "       vec3 rim_color = vec3(0.0); \n" \
+    "       vec3 rim_color = vec3(0.1); \n" \
     "       vec3 diff_color = vec3(0.125); \n" \
     "       vec3 spec_color = vec3(0.1); \n" \
 
@@ -203,7 +203,7 @@ const GLchar *fsRaytracerSourceCode = (GLchar *)
 
     "	int foobar[] = { 1, 1, 1, 1, 1, 1, 1 }; \n" \
 
-    "	for (i = 0; i < 6; i++) \n" \
+    "	for (i = 0; i < num_planes; i++) \n" \
     "	{ \n" \
     "		t = intersect_ray_plane(R, P[i], hitpos, normal); \n" \
     "		if (foobar[i] != 0 && t != 0.0) \n" \

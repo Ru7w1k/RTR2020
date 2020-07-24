@@ -240,6 +240,19 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 		resize(LOWORD(lParam), HIWORD(lParam));
 		break;
 
+	case WM_CHAR:
+		switch (wParam)
+		{
+		case '+':
+			if (max_depth < MAX_RECURSION_DEPTH) max_depth++;
+			break;
+
+		case '-':
+			if (max_depth > 1) max_depth--;
+			break;
+		}
+		break;
+
 	case WM_KEYDOWN:
 		switch (wParam)
 		{
@@ -575,7 +588,7 @@ void display(void)
 
 	block->mv_matrix = view_matrix * model_matrix;
 	block->view_matrix = view_matrix;
-	block->proj_matrix = perspective(50.0f, (float)gWidth / (float)gHeight, 0.1f, 1000.0f);
+	block->proj_matrix = perspective(50.0f, (float)gWidth / (float)gHeight, 0.1f, 100.0f);
 	glUnmapBuffer(GL_UNIFORM_BUFFER);
 
 	glBindBufferBase(GL_UNIFORM_BUFFER, 1, sphere_buffer);
