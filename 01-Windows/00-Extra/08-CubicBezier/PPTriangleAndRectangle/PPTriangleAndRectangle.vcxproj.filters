@@ -20,7 +20,7 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="pp-tessellation-quad.cpp">
+    <ClCompile Include="pp-cubic-bezier.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

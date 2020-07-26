@@ -492,7 +492,7 @@ int initialize(void)
 
 		"   tes_out.N = cross(v1, v2);" \
 
-		"	gl_Position = u_p_matrix * vec4(gl_TessCoord, 1.0);" \
+		"	gl_Position = u_p_matrix * p1;" \
 		"}";
 
 	// attach source code to fragment shader
@@ -547,7 +547,6 @@ int initialize(void)
 
 		"	vec4 c = vec4(1.0, -1.0, 0.0, 0.0) * N.z + vec4(0.0, 0.0, 0.0, 1.0);" \
 		"	FragColor = clamp(c, vec4(0.0), vec4(1.0));" \
-		"	FragColor = vec4(1.0);" \
 		"}";
 
 	// attach source code to fragment shader
@@ -667,8 +666,8 @@ int initialize(void)
 	// vertex positions
 	glGenBuffers(1, &vbo);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
-	glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 4, GL_FLOAT, GL_FALSE, 0, NULL);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), NULL, GL_DYNAMIC_DRAW);
+	glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 	glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
@@ -688,7 +687,7 @@ int initialize(void)
 	// glCullFace(GL_FRONT);
 
 	glPatchParameteri(GL_PATCH_VERTICES, 16);
-	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
 	// clear the screen by OpenGL
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -710,7 +709,7 @@ void resize(int width, int height)
 
 	glViewport(0, 0, (GLsizei)width, (GLsizei)height);
 
-	perspectiveProjectionMatrix = perspective(50.0, (float)width / (float)height, 1.0f, 1000.0f);
+	perspectiveProjectionMatrix = perspective(50.0, (float)width / (float)height, 1.0f, 100.0f);
 }
 
 
@@ -731,9 +730,9 @@ void display(void)
 	modelViewMatrix = mat4::identity();
 
 	// perform necessary transformations	
-	modelViewMatrix = translate(0.0f, 0.0f, -4.0f);/*
+	modelViewMatrix = translate(0.0f, 0.0f, -6.0f)
 		*rotate(t * 10.0f, 0.0f, 1.0f, 0.0f) 
-		*rotate(t * 17.0f, 1.0f, 0.0f, 0.0f);*/
+		*rotate(t * 17.0f, 1.0f, 0.0f, 0.0f);
 
 	// send necessary matrices to shader in respective uniforms
 	glUniformMatrix4fv(mvUniform, 1, GL_FALSE, modelViewMatrix);
@@ -770,8 +769,10 @@ void display(void)
 		float fi = (float)i / 16.0f;
 		vertices[2 + (i * 3)] = sinf(t * (0.2f + fi * 0.3f));
 	}
-	
+
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 	glPatchParameteri(GL_PATCH_VERTICES, 16);
 	glDrawArrays(GL_PATCHES, 0, 16);
