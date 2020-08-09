@@ -66,7 +66,7 @@ GLuint pos_tbo[2];
 GLuint texPositionUniform;	
 
 mat4   perspectiveProjectionMatrix;
-int iterations_per_frame = 2;
+int iterations_per_frame = 1;
 
 // Global function declaration
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -228,8 +228,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 			break;
 
 		case '+':
-			if (iterations_per_frame < 20)
-				iterations_per_frame++;
+			if (iterations_per_frame < 2000)
+				iterations_per_frame += 50;
 			break;
 
 		case '-':
@@ -401,16 +401,16 @@ int initialize(void)
 		"out vec3 tf_velocity;" \
 
 		// a uniform hold the timestep. the application can update this
-		"uniform float t = 0.07;" \
+		"uniform float t = 0.000005;" \
 		
 		// the global spring constant
-		"uniform float k = 7.1;" \
+		"uniform float k = 2000.0;" \
 
 		// gravity 
 		"uniform vec3 gravity = vec3(0.0, -0.08, 0.0);" \
 
 		// global damping constant
-		"uniform float c = 2.8;" \
+		"uniform float c = 0.1;" \
 
 		// spring resting length
 		"uniform float rest_length = 0.88;" \
@@ -420,7 +420,7 @@ int initialize(void)
 		"	vec3 p = position_mass.xyz;    /* p can be our position */" \
 		"	float m = position_mass.w;     /* m is the mass of our vertex */ " \
 		"	vec3 u = velocity;             /* u is the initial velocity */" \
-		"	vec3 F = vec3(0.0, -0.25, 0.0) * m - c * u;  /* F is the force on the mass */" \
+		"	vec3 F = vec3(0.0, -10.00, 0.0) * m - c * u;  /* F is the force on the mass */" \
 		"	bool fixed_node = true;        /* becomes false when force is applied */" \
 
 		"   F += gravity; " \
@@ -568,7 +568,7 @@ int initialize(void)
 
 		"void main()" \
 		"{" \
-		"	gl_Position = vec4(position * 0.03, 1.0);" \
+		"	gl_Position = vec4(position * 0.01, 1.0);" \
 		"}";
 
 	// attach source code to vertex shader
@@ -707,8 +707,8 @@ int initialize(void)
 			float fi = (float)i / (float)POINTS_X;
 
 			initial_positions[n] = vec4((fi - 0.5f) * (float)POINTS_X,
+				                        20.0f,
 				                        (fj - 0.5f) * (float)POINTS_Y,
-				                        0.6f * sinf(fi) * cosf(fj),
 				                        1.0);
 
 			initial_velocities[n] = vec3(0.0f);
@@ -869,12 +869,12 @@ void display(void)
 	if (bWind)
 	{
 		glUniform3fv(glGetUniformLocation(gUpdateShaderProgram, "gravity"),
-			1, vec3(0.25f, -0.08f, 0.25f));
+			1, vec3(0.0f, -10.08f, 10.25f));
 	} 
 	else
 	{
 		glUniform3fv(glGetUniformLocation(gUpdateShaderProgram, "gravity"),
-			1, vec3(0.0f, -0.08f, 0.0f));
+			1, vec3(0.0f, -10.08f, 0.0f));
 	}
 
 
