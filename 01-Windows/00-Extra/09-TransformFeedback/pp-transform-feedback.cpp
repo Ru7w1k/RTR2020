@@ -15,6 +15,8 @@
 #define WIN_WIDTH  800
 #define WIN_HEIGHT 600
 
+#define PRIMITIVE_RESTART 0xffffff
+
 using namespace vmath;
 
 enum {
@@ -570,7 +572,7 @@ int initialize(void)
 
 		"void main()" \
 		"{" \
-		"	gl_Position = vec4(position.xyz * 0.01, 1.0);" \
+		"	gl_Position = u_mvp_matrix * vec4(position.xyz , 1.0);" \
 		"}";
 
 	// attach source code to vertex shader
@@ -784,6 +786,11 @@ int initialize(void)
 	delete[] initial_velocities;
 	delete[] connection_vectors_1;
 
+	// primitive restart
+	glEnable(GL_PRIMITIVE_RESTART);
+	glPrimitiveRestartIndex(PRIMITIVE_RESTART);
+
+
 	glGenTextures(2, pos_tbo);
 	
 	glBindTexture(GL_TEXTURE_BUFFER, pos_tbo[0]);
@@ -792,36 +799,45 @@ int initialize(void)
 	glBindTexture(GL_TEXTURE_BUFFER, pos_tbo[1]);
 	glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, vbo[POSITION_B]);
 
-	int lines = (POINTS_X - 1) * POINTS_Y + (POINTS_Y - 1) * POINTS_X;
+	int lines = (POINTS_X * (POINTS_Y - 1)) + POINTS_X;
 
 	glGenBuffers(1, &indexBuffer);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, lines * 2 * sizeof(int), NULL, GL_STATIC_DRAW);
+	//glBufferData(GL_ELEMENT_ARRAY_BUFFER, lines * 2 * sizeof(int), NULL, GL_STATIC_DRAW);
 
 	int* e = (int*)glMapBufferRange(GL_ELEMENT_ARRAY_BUFFER, 0, lines * 2 * sizeof(int), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
 
-	// horizontal lines
-	for (j = 0; j < POINTS_Y; j++)
-	{
-		for (i = 0; i < POINTS_X - 1; i++)
-		{
-			*e++ = i + j * POINTS_X;
-			*e++ = 1 + i + j * POINTS_X;
-		}
-	}
+	//// horizontal lines
+	//for (j = 0; j < POINTS_Y; j++)
+	//{
+	//	for (i = 0; i < POINTS_X - 1; i++)
+	//	{
+	//		*e++ = i + j * POINTS_X;
+	//		*e++ = 1 + i + j * POINTS_X;
+	//	}
+	//}
 
-	// vertical lines
-	for (i = 0; i < POINTS_X; i++)
-	{
-		for (j = 0; j < POINTS_Y - 1; j++)
-		{
-			*e++ = i + j * POINTS_X;
-			*e++ = POINTS_X + i + j * POINTS_X;
-		}
-	}
+	//// vertical lines
+	//for (i = 0; i < POINTS_X; i++)
+	//{
+	//	for (j = 0; j < POINTS_Y - 1; j++)
+	//	{
+	//		*e++ = i + j * POINTS_X;
+	//		*e++ = POINTS_X + i + j * POINTS_X;
+	//	}
+	//}
 
 	// triangle mesh
-
+	for (j = 0; j < POINTS_Y - 1; j++)
+	{
+		for (i = 0; i < POINTS_X; i++)
+		{
+			*e++ = j * POINTS_X + i;
+			*e++ = (1 + j) * POINTS_X + i;
+		}
+		*e++ = PRIMITIVE_RESTART;
+	}
 
 	glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
 
@@ -861,7 +877,7 @@ void resize(int width, int height)
 
 	glViewport(0, 0, (GLsizei)width, (GLsizei)height);
 
-	perspectiveProjectionMatrix = perspective(60.0, (float)width / (float)height, 1.0f, 1000.0f);
+	perspectiveProjectionMatrix = perspective(60.0, (float)width / (float)height, 0.1f, 1000.0f);
 }
 
 
@@ -869,13 +885,14 @@ void display(void)
 {
 	int i;
 	static int iteration_index = 0;
+	static float t = 0.0f;
 
 	glUseProgram(gUpdateShaderProgram);
 
 	if (bWind)
 	{
 		glUniform3fv(glGetUniformLocation(gUpdateShaderProgram, "gravity"),
-			1, vec3(0.0f, 0.0f, 30.0f));
+			1, vec3(0.0f, 0.0f, 15.0f));
 	} 
 	else
 	{
@@ -911,15 +928,24 @@ void display(void)
 	/*glPointSize(4.0f);
 	glDrawArrays(GL_POINTS, 0, POINTS_TOTAL);*/
 
-	/*mat4 mvpMatrix = mat4::identity();
-	mvpMatrix *= translate(0.0f, 0.0f, -50.0f);
-	mvpMatrix *= perspectiveProjectionMatrix;*/
+	mat4 mvpMatrix = mat4::identity();
+	mvpMatrix *= lookat(
+		vec3(80.0f*cosf(t), 0.0f, 80.0f*sinf(t)),
+		vec3(0.0f, 0.0f, 0.0f), 
+		vec3(0.0f, 1.0f, 0.0f));
+	mvpMatrix = perspectiveProjectionMatrix * mvpMatrix;
 
-	//glUniformMatrix4fv(glGetUniformLocation(gRenderShaderProgram, "u_mvp_matrix"), 1, GL_FALSE, mvpMatrix);
+	glUniformMatrix4fv(glGetUniformLocation(gRenderShaderProgram, "u_mvp_matrix"), 1, GL_FALSE, mvpMatrix);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
-	glDrawElements(GL_LINES, CONNECTIONS_TOTAL * 2, GL_UNSIGNED_INT, NULL);
+	//glDrawElements(GL_LINES, CONNECTIONS_TOTAL * 2, GL_UNSIGNED_INT, NULL);
+
+	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+	int lines = (POINTS_X * (POINTS_Y - 1)) + POINTS_X;
+	glDrawElements(GL_TRIANGLE_STRIP, lines * 2, GL_UNSIGNED_INT, NULL);
 
 	SwapBuffers(ghDC);
+	t += 0.001f;
 }
 
 void update(void)
