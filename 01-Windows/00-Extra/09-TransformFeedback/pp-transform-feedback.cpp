@@ -228,13 +228,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 			break;
 
 		case '+':
-			if (iterations_per_frame < 2000)
-				iterations_per_frame += 50;
+			if (iterations_per_frame < 1000)
+				iterations_per_frame += 100;
 			break;
 
 		case '-':
 			if (iterations_per_frame > 0)
-				iterations_per_frame--;
+				iterations_per_frame -= 100;
 			break;
 
 		}
@@ -401,19 +401,19 @@ int initialize(void)
 		"out vec3 tf_velocity;" \
 
 		// a uniform hold the timestep. the application can update this
-		"uniform float t = 0.000005;" \
+		"uniform float t = 0.000005 * 4;" \
 		
 		// the global spring constant
-		"uniform float k = 2000.0;" \
+		"uniform float k = 5000.0;" \
 
 		// gravity 
 		"uniform vec3 gravity = vec3(0.0, -0.08, 0.0);" \
 
 		// global damping constant
-		"uniform float c = 0.1;" \
+		"uniform float c = 0.25;" \
 
 		// spring resting length
-		"uniform float rest_length = 0.88;" \
+		"uniform float rest_length = 1.00;" \
 
 		"void main()" \
 		"{" \
@@ -464,7 +464,7 @@ int initialize(void)
 		"	vec3 v = u + a * t;" \
 
 			// constrain the absolute value of the displacement per step
-		"	s = clamp(s, vec3(-25.0), vec3(25.0));" \
+		"	s = clamp(s, vec3(-15.0), vec3(15.0));" \
 
 			// write the outputs
 		"	tf_position_mass = vec4(p + s, m);" \
@@ -564,11 +564,13 @@ int initialize(void)
 		"#version 450 core" \
 		"\n" \
 
-		"in vec3 position;" \
+		"in vec4 position;" \
+
+		"uniform mat4 u_mvp_matrix;" \
 
 		"void main()" \
 		"{" \
-		"	gl_Position = vec4(position * 0.01, 1.0);" \
+		"	gl_Position = vec4(position.xyz * 0.01, 1.0);" \
 		"}";
 
 	// attach source code to vertex shader
@@ -798,6 +800,7 @@ int initialize(void)
 
 	int* e = (int*)glMapBufferRange(GL_ELEMENT_ARRAY_BUFFER, 0, lines * 2 * sizeof(int), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
 
+	// horizontal lines
 	for (j = 0; j < POINTS_Y; j++)
 	{
 		for (i = 0; i < POINTS_X - 1; i++)
@@ -807,6 +810,7 @@ int initialize(void)
 		}
 	}
 
+	// vertical lines
 	for (i = 0; i < POINTS_X; i++)
 	{
 		for (j = 0; j < POINTS_Y - 1; j++)
@@ -815,6 +819,9 @@ int initialize(void)
 			*e++ = POINTS_X + i + j * POINTS_X;
 		}
 	}
+
+	// triangle mesh
+
 
 	glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
 
@@ -854,7 +861,7 @@ void resize(int width, int height)
 
 	glViewport(0, 0, (GLsizei)width, (GLsizei)height);
 
-	//perspectiveProjectionMatrix = perspective(50.0, (float)width / (float)height, 1.0f, 100.0f);
+	perspectiveProjectionMatrix = perspective(60.0, (float)width / (float)height, 1.0f, 1000.0f);
 }
 
 
@@ -862,19 +869,18 @@ void display(void)
 {
 	int i;
 	static int iteration_index = 0;
-	static float t = 0.0f;
 
 	glUseProgram(gUpdateShaderProgram);
 
 	if (bWind)
 	{
 		glUniform3fv(glGetUniformLocation(gUpdateShaderProgram, "gravity"),
-			1, vec3(0.0f, -10.08f, 10.25f));
+			1, vec3(0.0f, 0.0f, 30.0f));
 	} 
 	else
 	{
 		glUniform3fv(glGetUniformLocation(gUpdateShaderProgram, "gravity"),
-			1, vec3(0.0f, -10.08f, 0.0f));
+			1, vec3(0.0f, 0.0f, 0.0f));
 	}
 
 
@@ -905,11 +911,15 @@ void display(void)
 	/*glPointSize(4.0f);
 	glDrawArrays(GL_POINTS, 0, POINTS_TOTAL);*/
 
+	/*mat4 mvpMatrix = mat4::identity();
+	mvpMatrix *= translate(0.0f, 0.0f, -50.0f);
+	mvpMatrix *= perspectiveProjectionMatrix;*/
+
+	//glUniformMatrix4fv(glGetUniformLocation(gRenderShaderProgram, "u_mvp_matrix"), 1, GL_FALSE, mvpMatrix);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
 	glDrawElements(GL_LINES, CONNECTIONS_TOTAL * 2, GL_UNSIGNED_INT, NULL);
 
 	SwapBuffers(ghDC);
-	t += 0.001f;
 }
 
 void update(void)
