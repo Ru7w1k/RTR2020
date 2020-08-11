@@ -23,7 +23,8 @@ enum {
 	AMC_ATTRIBUTE_POSITION_MASS = 0,
 	AMC_ATTRIBUTE_VELOCITY,
 	AMC_ATTRIBUTE_CONNECTION_1,
-	AMC_ATTRIBUTE_CONNECTION_2
+	AMC_ATTRIBUTE_CONNECTION_2,
+	AMC_ATTRIBUTE_NORMAL
 };
 
 enum BUFFER_TYPE_t
@@ -32,7 +33,9 @@ enum BUFFER_TYPE_t
 	POSITION_B,
 	VELOCITY_A,
 	VELOCITY_B,
-	CONNECTION_1
+	CONNECTION_1,
+	CONNECTION_2,
+	NORMAL
 };
 
 enum
@@ -48,6 +51,7 @@ FILE  *gpFile = NULL;
 bool  gbActiveWindow = false;
 bool  gbIsFullScreen = false;
 bool  bWind = false;
+bool  bMesh = false;
 HDC   ghDC = NULL;
 HGLRC ghRC = NULL;
 HWND  ghWnd = NULL;
@@ -57,18 +61,20 @@ int gHeight;
 
 WINDOWPLACEMENT wpPrev = { sizeof(WINDOWPLACEMENT) };
 
-GLuint gUpdateShaderProgram;
+GLuint gUpdateVertexShaderProgram;
+GLuint gUpdateNormalShaderProgram;
 GLuint gRenderShaderProgram;
 
-GLuint vao[2];			// vertex array object
-GLuint vbo[6];			// vertex buffer object
+GLuint vao[2];			
+GLuint vbo[7]; // PosA, PosB, VelA, VelB, ConnA, ConnB, Norm			
 GLuint indexBuffer;
-GLuint pos_tbo[2];
+GLuint pos_tbo[2]; // linked to vbo PosA and PosB respectively
+GLuint norm_tbo;   // linked to vbo Norm 
 
 GLuint texPositionUniform;	
 
 mat4   perspectiveProjectionMatrix;
-int iterations_per_frame = 1;
+int iterations_per_frame = 1000;
 
 // Global function declaration
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -229,6 +235,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 			bWind = !bWind;
 			break;
 
+		case 'M':
+		case 'm':
+			bMesh = !bMesh;
+			break;
+
 		case '+':
 			if (iterations_per_frame < 1000)
 				iterations_per_frame += 100;
@@ -374,7 +385,7 @@ int initialize(void)
 		DestroyWindow(ghWnd);
 	}
 
-	//////// UPDATE SHADER ////////////////////////////////////////////////////////////////////////////////
+	//////// UPDATE VERTEX SHADER //////////////////////////////////////////////////////////////////////////////
 
 	// create vertex shader object
 	vertexShaderObject = glCreateShader(GL_VERTEX_SHADER);
@@ -505,16 +516,16 @@ int initialize(void)
 	}
 
 	// create shader program object 
-	gUpdateShaderProgram = glCreateProgram();
+	gUpdateVertexShaderProgram = glCreateProgram();
 
 	// attach vertex shader to shader program
-	glAttachShader(gUpdateShaderProgram, vertexShaderObject);
+	glAttachShader(gUpdateVertexShaderProgram, vertexShaderObject);
 
 	// pre-linking binding to vertex attribute
-	glBindAttribLocation(gUpdateShaderProgram, AMC_ATTRIBUTE_POSITION_MASS, "position_mass");
-	glBindAttribLocation(gUpdateShaderProgram, AMC_ATTRIBUTE_VELOCITY, "velocity");
-	glBindAttribLocation(gUpdateShaderProgram, AMC_ATTRIBUTE_CONNECTION_1, "connection_1");
-	glBindAttribLocation(gUpdateShaderProgram, AMC_ATTRIBUTE_CONNECTION_2, "connection_2");
+	glBindAttribLocation(gUpdateVertexShaderProgram, AMC_ATTRIBUTE_POSITION_MASS, "position_mass");
+	glBindAttribLocation(gUpdateVertexShaderProgram, AMC_ATTRIBUTE_VELOCITY, "velocity");
+	glBindAttribLocation(gUpdateVertexShaderProgram, AMC_ATTRIBUTE_CONNECTION_1, "connection_1");
+	glBindAttribLocation(gUpdateVertexShaderProgram, AMC_ATTRIBUTE_CONNECTION_2, "connection_2");
 
 	// transform feedback things
 	static const char* tf_varyings[] =
@@ -523,27 +534,27 @@ int initialize(void)
 		"tf_velocity"
 	};
 
-	glTransformFeedbackVaryings(gUpdateShaderProgram, 2, tf_varyings, GL_SEPARATE_ATTRIBS);
+	glTransformFeedbackVaryings(gUpdateVertexShaderProgram, 2, tf_varyings, GL_SEPARATE_ATTRIBS);
 
 	// link the shader program
-	glLinkProgram(gUpdateShaderProgram);
+	glLinkProgram(gUpdateVertexShaderProgram);
 
 	// linking errors
 	GLint iProgramLinkStatus = 0;
 	iInfoLogLength = 0;
 	szInfoLog = NULL;
 
-	glGetProgramiv(gUpdateShaderProgram, GL_LINK_STATUS, &iProgramLinkStatus);
+	glGetProgramiv(gUpdateVertexShaderProgram, GL_LINK_STATUS, &iProgramLinkStatus);
 	if (iProgramLinkStatus == GL_FALSE)
 	{
-		glGetProgramiv(gUpdateShaderProgram, GL_INFO_LOG_LENGTH, &iInfoLogLength);
+		glGetProgramiv(gUpdateVertexShaderProgram, GL_INFO_LOG_LENGTH, &iInfoLogLength);
 		if (iInfoLogLength > 0)
 		{
 			szInfoLog = (GLchar*)malloc(iInfoLogLength);
 			if (szInfoLog != NULL)
 			{
 				GLsizei written;
-				glGetProgramInfoLog(gUpdateShaderProgram, GL_INFO_LOG_LENGTH, &written, szInfoLog);
+				glGetProgramInfoLog(gUpdateVertexShaderProgram, GL_INFO_LOG_LENGTH, &written, szInfoLog);
 
 				fprintf(gpFile, ("Update Shader Program Linking Info Log: %s"), szInfoLog);
 				free(szInfoLog);
@@ -554,7 +565,177 @@ int initialize(void)
 	}
 
 	// post-linking retrieving uniform locations
-	texPositionUniform = glGetUniformLocation(gUpdateShaderProgram, "tex_position");
+	texPositionUniform = glGetUniformLocation(gUpdateVertexShaderProgram, "tex_position");
+
+	//////// UPDATE NORMAL SHADER //////////////////////////////////////////////////////////////////////////////
+
+	// create vertex shader object
+	vertexShaderObject = glCreateShader(GL_VERTEX_SHADER);
+
+	// vertex shader source code 
+	vertexShaderSourceCode = (GLchar*)
+		"#version 450 core" \
+		"\n" \
+
+		// this input vector contains the vertex posisiton in xyz,
+		// and the mass of the vertex in w
+		"in vec4 position_mass;" \
+
+		// this is our connection vector
+		"in ivec4 connection_1;" \
+		"in ivec4 connection_2;" \
+
+		// this is TBO that will be bound to the same buffer as the position_mass input attribute
+		"uniform samplerBuffer tex_position;" \
+
+		// the output of the vertex shader are the same as inputs
+		"out vec3 tf_normal;" \
+
+		"void main()" \
+		"{" \
+		"	vec3 p = position_mass.xyz;    /* p can be our position */" \
+		"	vec3 n = vec3(0.0);" \
+
+			// find other two points of this triangle (RIGHT UP)
+		"	if (connection_1[2] != -1 && connection_1[3] != -1)" \
+		"	{" \
+		"		vec3 q = texelFetch(tex_position, connection_1[2]).xyz - p;" \
+		"		vec3 r = texelFetch(tex_position, connection_1[3]).xyz - p;" \
+		"		n += cross(q, r);" \
+		"	}" \
+
+			// find other two points of this triangle (UP UPPERLEFT)
+		"	if (connection_1[3] != -1 && connection_2[3] != -1)" \
+		"	{" \
+		"		vec3 q = texelFetch(tex_position, connection_1[3]).xyz - p;" \
+		"		vec3 r = texelFetch(tex_position, connection_2[3]).xyz - p;" \
+		"		n += cross(q, r);" \
+		"	}" \
+
+			// find other two points of this triangle (UPPERLEFT LEFT)
+		"	if (connection_2[3] != -1 && connection_1[0] != -1)" \
+		"	{" \
+		"		vec3 q = texelFetch(tex_position, connection_2[3]).xyz - p;" \
+		"		vec3 r = texelFetch(tex_position, connection_1[0]).xyz - p;" \
+		"		n += cross(q, r);" \
+		"	}" \
+
+			// find other two points of this triangle (LEFT DOWN)
+		"	if (connection_1[0] != -1 && connection_1[1] != -1)" \
+		"	{" \
+		"		vec3 q = texelFetch(tex_position, connection_1[0]).xyz - p;" \
+		"		vec3 r = texelFetch(tex_position, connection_1[1]).xyz - p;" \
+		"		n += cross(q, r);" \
+		"	}" \
+
+			// find other two points of this triangle (LEFT DOWN)
+		"	if (connection_1[0] != -1 && connection_1[1] != -1)" \
+		"	{" \
+		"		vec3 q = texelFetch(tex_position, connection_1[0]).xyz - p;" \
+		"		vec3 r = texelFetch(tex_position, connection_1[1]).xyz - p;" \
+		"		n += cross(q, r);" \
+		"	}" \
+
+			// find other two points of this triangle (DOWN LOWERRIGHT)
+		"	if (connection_1[1] != -1 && connection_2[2] != -1)" \
+		"	{" \
+		"		vec3 q = texelFetch(tex_position, connection_1[1]).xyz - p;" \
+		"		vec3 r = texelFetch(tex_position, connection_2[2]).xyz - p;" \
+		"		n += cross(q, r);" \
+		"	}" \
+
+			// find other two points of this triangle (LOWERRIGHT RIGHT)
+		"	if (connection_2[2] != -1 && connection_1[2] != -1)" \
+		"	{" \
+		"		vec3 q = texelFetch(tex_position, connection_2[2]).xyz - p;" \
+		"		vec3 r = texelFetch(tex_position, connection_1[2]).xyz - p;" \
+		"		n += cross(q, r);" \
+		"	}" \
+
+		// write the outputs
+		"	tf_normal = normalize(n);" \
+		"}";
+
+	// attach source code to vertex shader
+	glShaderSource(vertexShaderObject, 1, (const GLchar**)&vertexShaderSourceCode, NULL);
+
+	// compile vertex shader source code
+	glCompileShader(vertexShaderObject);
+
+	// compilation errors 
+	iShaderCompileStatus = 0;
+	iInfoLogLength = 0;
+	szInfoLog = NULL;
+
+	glGetShaderiv(vertexShaderObject, GL_COMPILE_STATUS, &iShaderCompileStatus);
+	if (iShaderCompileStatus == GL_FALSE)
+	{
+		glGetShaderiv(vertexShaderObject, GL_INFO_LOG_LENGTH, &iInfoLogLength);
+		if (iInfoLogLength > 0)
+		{
+			szInfoLog = (GLchar*)malloc(iInfoLogLength);
+			if (szInfoLog != NULL)
+			{
+				GLsizei written;
+				glGetShaderInfoLog(vertexShaderObject, GL_INFO_LOG_LENGTH, &written, szInfoLog);
+
+				fprintf(gpFile, "Normal Vertex Shader Compiler Info Log: %s", szInfoLog);
+				free(szInfoLog);
+				uninitialize();
+				DestroyWindow(ghWnd);
+			}
+		}
+	}
+
+	// create shader program object 
+	gUpdateNormalShaderProgram = glCreateProgram();
+
+	// attach vertex shader to shader program
+	glAttachShader(gUpdateNormalShaderProgram, vertexShaderObject);
+
+	// pre-linking binding to vertex attribute
+	glBindAttribLocation(gUpdateNormalShaderProgram, AMC_ATTRIBUTE_POSITION_MASS, "position_mass");
+	glBindAttribLocation(gUpdateNormalShaderProgram, AMC_ATTRIBUTE_CONNECTION_1, "connection_1");
+	glBindAttribLocation(gUpdateNormalShaderProgram, AMC_ATTRIBUTE_CONNECTION_2, "connection_2");
+
+	// transform feedback things
+	static const char* tf_varyings_1[] =
+	{
+		"tf_normal",
+	};
+
+	glTransformFeedbackVaryings(gUpdateNormalShaderProgram, 1, tf_varyings_1, GL_SEPARATE_ATTRIBS);
+
+	// link the shader program
+	glLinkProgram(gUpdateNormalShaderProgram);
+
+	// linking errors
+	iProgramLinkStatus = 0;
+	iInfoLogLength = 0;
+	szInfoLog = NULL;
+
+	glGetProgramiv(gUpdateNormalShaderProgram, GL_LINK_STATUS, &iProgramLinkStatus);
+	if (iProgramLinkStatus == GL_FALSE)
+	{
+		glGetProgramiv(gUpdateNormalShaderProgram, GL_INFO_LOG_LENGTH, &iInfoLogLength);
+		if (iInfoLogLength > 0)
+		{
+			szInfoLog = (GLchar*)malloc(iInfoLogLength);
+			if (szInfoLog != NULL)
+			{
+				GLsizei written;
+				glGetProgramInfoLog(gUpdateNormalShaderProgram, GL_INFO_LOG_LENGTH, &written, szInfoLog);
+
+				fprintf(gpFile, ("Update Normal Shader Program Linking Info Log: %s"), szInfoLog);
+				free(szInfoLog);
+				uninitialize();
+				DestroyWindow(ghWnd);
+			}
+		}
+	}
+
+	// post-linking retrieving uniform locations
+	texPositionUniform = glGetUniformLocation(gUpdateNormalShaderProgram, "tex_position");
 
 	////////// RENDER SHADER //////////////////////////////////////////////////////////////////////////////////////
 
@@ -567,12 +748,28 @@ int initialize(void)
 		"\n" \
 
 		"in vec4 position;" \
+		"in vec3 normal;" \
 
-		"uniform mat4 u_mvp_matrix;" \
+		"uniform float front;" \
+		"uniform mat4 u_m_matrix;" \
+		"uniform mat4 u_v_matrix;" \
+		"uniform mat4 u_p_matrix;" \
+		"uniform vec4 u_light_position = vec4(10.0f, 0.0f, 10.0f, 1.0f);" \
+
+		"out vec3 tnorm;" \
+		"out vec3 light_direction;" \
+		"out vec3 viewer_vector;" \
 
 		"void main()" \
 		"{" \
-		"	gl_Position = u_mvp_matrix * vec4(position.xyz , 1.0);" \
+
+		"   vec4 eye_coordinates = u_v_matrix * u_m_matrix * position;" \
+		"   tnorm = mat3(u_v_matrix * u_m_matrix) * normal * front;" \
+		"   light_direction = vec3(u_light_position - eye_coordinates);" \
+		"   float tn_dot_ldir = max(dot(tnorm, light_direction), 0.0);" \
+		"   viewer_vector = vec3(-eye_coordinates.xyz);" \
+
+		"	gl_Position = u_p_matrix * u_v_matrix * u_m_matrix * vec4(position.xyz , 1.0);" \
 		"}";
 
 	// attach source code to vertex shader
@@ -614,11 +811,32 @@ int initialize(void)
 		"#version 450 core" \
 		"\n" \
 		
+		"in vec3 tnorm;" \
+		"in vec3 light_direction;" \
+		"in vec3 viewer_vector;" \
+
+		"uniform vec3 u_la = vec3(0.4, 0.4, 0.4);" \
+		"uniform vec3 u_ld = vec3(0.8, 0.8, 0.8);" \
+		"uniform vec3 u_ls = vec3(1.0, 1.0, 1.0);" \
+		"uniform vec3 u_ka = vec3(0.4, 0.4, 0.4);" \
+		"uniform vec3 u_kd = vec3(0.8, 0.8, 0.8);" \
+		"uniform vec3 u_ks = vec3(1.0, 1.0, 1.0);" \
+		"uniform float u_shininess = 25.0;" \
+		
 		"out vec4 FragColor;" \
 
 		"void main (void)" \
 		"{" \
-		"	FragColor = vec4(1.0);" \
+		"   vec3 ntnorm = normalize(tnorm);" \
+		"   vec3 nlight_direction = normalize(light_direction);" \
+		"   vec3 nviewer_vector = normalize(viewer_vector);" \
+		"   vec3 reflection_vector = reflect(-nlight_direction, ntnorm);" \
+		"   float tn_dot_ldir = max(dot(ntnorm, nlight_direction), 0.0);" \
+		"   vec3 ambient  = u_la * u_ka;" \
+		"   vec3 diffuse  = u_ld * u_kd * tn_dot_ldir;" \
+		"   vec3 specular = u_ls * u_ks * pow(max(dot(reflection_vector, nviewer_vector), 0.0), u_shininess);" \
+		"   vec3 phong_ads_light = ambient + diffuse;" \
+		"   FragColor = vec4(phong_ads_light, 1.0);" \
 		"}";
 
 	// attach source code to fragment shader
@@ -663,6 +881,7 @@ int initialize(void)
 
 	// pre-linking binding to vertex attribute
 	glBindAttribLocation(gRenderShaderProgram, AMC_ATTRIBUTE_POSITION_MASS, "position");
+	glBindAttribLocation(gRenderShaderProgram, AMC_ATTRIBUTE_NORMAL, "normal");
 
 	// link the shader program
 	glLinkProgram(gRenderShaderProgram);
@@ -697,6 +916,7 @@ int initialize(void)
 	int i, j;
 
 	vec4 *initial_positions = new vec4[POINTS_TOTAL];
+	vec3 *initial_normals = new vec3[POINTS_TOTAL];
 	vec3 *initial_velocities = new vec3[POINTS_TOTAL];
 	ivec4 *connection_vectors_1 = new ivec4[POINTS_TOTAL];
 	ivec4 *connection_vectors_2 = new ivec4[POINTS_TOTAL];
@@ -716,10 +936,11 @@ int initialize(void)
 				                        1.0);
 
 			initial_velocities[n] = vec3(0.0f);
+			initial_normals[n] = vec3(0.0f);
 			connection_vectors_1[n] = ivec4(-1);
 			connection_vectors_2[n] = ivec4(-1);
 
-			// straight connections (up down left right)
+			// straight connections (left down right up)
 			if (j != (POINTS_Y - 1) || i % 7 != 0)
 			{
 				if (i != 0)
@@ -755,7 +976,7 @@ int initialize(void)
 
 	// create vaos and vbos
 	glGenVertexArrays(2, vao);
-	glGenBuffers(6, vbo);
+	glGenBuffers(7, vbo);
 
 	for (i = 0; i < 2; i++)
 	{
@@ -776,21 +997,28 @@ int initialize(void)
 		glVertexAttribIPointer(AMC_ATTRIBUTE_CONNECTION_1, 4, GL_INT, 0, NULL);
 		glEnableVertexAttribArray(AMC_ATTRIBUTE_CONNECTION_1);
 
-		glBindBuffer(GL_ARRAY_BUFFER, vbo[CONNECTION_1 + 1]);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo[CONNECTION_2]);
 		glBufferData(GL_ARRAY_BUFFER, POINTS_TOTAL * sizeof(ivec4), connection_vectors_2, GL_DYNAMIC_COPY);
 		glVertexAttribIPointer(AMC_ATTRIBUTE_CONNECTION_2, 4, GL_INT, 0, NULL);
 		glEnableVertexAttribArray(AMC_ATTRIBUTE_CONNECTION_2);
+
+		glBindBuffer(GL_ARRAY_BUFFER, vbo[NORMAL]);
+		glBufferData(GL_ARRAY_BUFFER, POINTS_TOTAL * sizeof(vec3), initial_normals, GL_DYNAMIC_COPY);
+		glVertexAttribPointer(AMC_ATTRIBUTE_NORMAL, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+		glEnableVertexAttribArray(AMC_ATTRIBUTE_NORMAL);
 	}
 
 	delete[] initial_positions;
+	delete[] initial_normals;
 	delete[] initial_velocities;
 	delete[] connection_vectors_1;
+	delete[] connection_vectors_2;
 
 	// primitive restart
 	glEnable(GL_PRIMITIVE_RESTART);
 	glPrimitiveRestartIndex(PRIMITIVE_RESTART);
 
-
+	// textures for positions
 	glGenTextures(2, pos_tbo);
 	
 	glBindTexture(GL_TEXTURE_BUFFER, pos_tbo[0]);
@@ -799,6 +1027,13 @@ int initialize(void)
 	glBindTexture(GL_TEXTURE_BUFFER, pos_tbo[1]);
 	glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, vbo[POSITION_B]);
 
+	// texture for normal
+	glGenTextures(1, &norm_tbo);
+
+	glBindTexture(GL_TEXTURE_BUFFER, norm_tbo);
+	glTexBuffer(GL_TEXTURE_BUFFER, GL_RGB32F, vbo[NORMAL]);
+
+	/////
 	int lines = (POINTS_X * (POINTS_Y - 1)) + POINTS_X;
 
 	glGenBuffers(1, &indexBuffer);
@@ -850,9 +1085,12 @@ int initialize(void)
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
 
+	// enable blend
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
 	// face culling
-	// glEnable(GL_CULL_FACE);
-	// glCullFace(GL_FRONT);
+	 glEnable(GL_CULL_FACE);
 
 	// clear the screen by OpenGL
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -887,16 +1125,16 @@ void display(void)
 	static int iteration_index = 0;
 	static float t = 0.0f;
 
-	glUseProgram(gUpdateShaderProgram);
+	glUseProgram(gUpdateVertexShaderProgram);
 
 	if (bWind)
 	{
-		glUniform3fv(glGetUniformLocation(gUpdateShaderProgram, "gravity"),
-			1, vec3(0.0f, 0.0f, 15.0f));
+		glUniform3fv(glGetUniformLocation(gUpdateVertexShaderProgram, "gravity"),
+			1, vec3(0.0f, 0.0f, 5.0f));
 	} 
 	else
 	{
-		glUniform3fv(glGetUniformLocation(gUpdateShaderProgram, "gravity"),
+		glUniform3fv(glGetUniformLocation(gUpdateVertexShaderProgram, "gravity"),
 			1, vec3(0.0f, 0.0f, 0.0f));
 	}
 
@@ -905,13 +1143,32 @@ void display(void)
 
 	for (i = iterations_per_frame; i != 0; --i)
 	{
+		// bind the buffer for current state
 		glBindVertexArray(vao[iteration_index & 1]);
 		glBindTexture(GL_TEXTURE_BUFFER, pos_tbo[iteration_index & 1]);
 		iteration_index++;
 
+		// bind the buffer for next state
 		glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, vbo[POSITION_A + (iteration_index & 1)]);
 		glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 1, vbo[VELOCITY_A + (iteration_index & 1)]);
 
+		// calculate!
+		glBeginTransformFeedback(GL_POINTS);
+		glDrawArrays(GL_POINTS, 0, POINTS_TOTAL);
+		glEndTransformFeedback();
+	}
+
+	// calculate the normals!
+	{
+		glUseProgram(gUpdateNormalShaderProgram);
+
+		// texture is the final vertex positions
+		glBindTexture(GL_TEXTURE_BUFFER, pos_tbo[iteration_index & 1]);
+
+		// final normals will be stored in this buffer
+		glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, vbo[NORMAL]);
+
+		// calculate!
 		glBeginTransformFeedback(GL_POINTS);
 		glDrawArrays(GL_POINTS, 0, POINTS_TOTAL);
 		glEndTransformFeedback();
@@ -920,7 +1177,6 @@ void display(void)
 	glDisable(GL_RASTERIZER_DISCARD);
 
 	glViewport(0, 0, (GLsizei)gWidth, (GLsizei)gHeight);
-
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	glUseProgram(gRenderShaderProgram);
@@ -928,20 +1184,34 @@ void display(void)
 	/*glPointSize(4.0f);
 	glDrawArrays(GL_POINTS, 0, POINTS_TOTAL);*/
 
-	mat4 mvpMatrix = mat4::identity();
-	mvpMatrix *= lookat(
+	mat4 mMatrix = mat4::identity();
+	mat4 vMatrix = mat4::identity();
+	vMatrix *= lookat(
 		vec3(80.0f*cosf(t), 0.0f, 80.0f*sinf(t)),
 		vec3(0.0f, 0.0f, 0.0f), 
 		vec3(0.0f, 1.0f, 0.0f));
-	mvpMatrix = perspectiveProjectionMatrix * mvpMatrix;
 
-	glUniformMatrix4fv(glGetUniformLocation(gRenderShaderProgram, "u_mvp_matrix"), 1, GL_FALSE, mvpMatrix);
+	glUniformMatrix4fv(glGetUniformLocation(gRenderShaderProgram, "u_m_matrix"), 1, GL_FALSE, mMatrix);
+	glUniformMatrix4fv(glGetUniformLocation(gRenderShaderProgram, "u_v_matrix"), 1, GL_FALSE, vMatrix);
+	glUniformMatrix4fv(glGetUniformLocation(gRenderShaderProgram, "u_p_matrix"), 1, GL_FALSE, perspectiveProjectionMatrix);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
 	//glDrawElements(GL_LINES, CONNECTIONS_TOTAL * 2, GL_UNSIGNED_INT, NULL);
 
-	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+	if (bMesh)
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+	else
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
 	int lines = (POINTS_X * (POINTS_Y - 1)) + POINTS_X;
+
+	// front side
+	glUniform1f(glGetUniformLocation(gRenderShaderProgram, "front"), -1.0f);
+	glCullFace(GL_BACK);
+	glDrawElements(GL_TRIANGLE_STRIP, lines * 2, GL_UNSIGNED_INT, NULL);
+
+	// back size
+	glUniform1f(glGetUniformLocation(gRenderShaderProgram, "front"), 1.0f);
+	glCullFace(GL_FRONT);
 	glDrawElements(GL_TRIANGLE_STRIP, lines * 2, GL_UNSIGNED_INT, NULL);
 
 	SwapBuffers(ghDC);
@@ -964,26 +1234,26 @@ void uninitialize(void)
 
 	if (vao)
 	{
-		glDeleteVertexArrays(5, vao);
+		glDeleteVertexArrays(7, vao);
 	}
 
-	if (gUpdateShaderProgram)
+	if (gRenderShaderProgram)
 	{
 		GLsizei shaderCount;
 		GLsizei shaderNumber;
 
-		glUseProgram(gUpdateShaderProgram);
-		glGetProgramiv(gUpdateShaderProgram, GL_ATTACHED_SHADERS, &shaderCount);
+		glUseProgram(gRenderShaderProgram);
+		glGetProgramiv(gRenderShaderProgram, GL_ATTACHED_SHADERS, &shaderCount);
 
-		GLuint *pShaders = (GLuint *)malloc(sizeof(GLuint) * shaderCount);
+		GLuint* pShaders = (GLuint*)malloc(sizeof(GLuint) * shaderCount);
 		if (pShaders)
 		{
-			glGetAttachedShaders(gUpdateShaderProgram, shaderCount, &shaderCount, pShaders);
+			glGetAttachedShaders(gRenderShaderProgram, shaderCount, &shaderCount, pShaders);
 
 			for (shaderNumber = 0; shaderNumber < shaderCount; shaderNumber++)
 			{
 				// detach shader
-				glDetachShader(gUpdateShaderProgram, pShaders[shaderNumber]);
+				glDetachShader(gRenderShaderProgram, pShaders[shaderNumber]);
 
 				// delete shader
 				glDeleteShader(pShaders[shaderNumber]);
@@ -992,8 +1262,68 @@ void uninitialize(void)
 			free(pShaders);
 		}
 
-		glDeleteProgram(gUpdateShaderProgram);
-		gUpdateShaderProgram = 0;
+		glDeleteProgram(gRenderShaderProgram);
+		gRenderShaderProgram = 0;
+		glUseProgram(0);
+	}
+
+	if (gUpdateNormalShaderProgram)
+	{
+		GLsizei shaderCount;
+		GLsizei shaderNumber;
+
+		glUseProgram(gUpdateNormalShaderProgram);
+		glGetProgramiv(gUpdateNormalShaderProgram, GL_ATTACHED_SHADERS, &shaderCount);
+
+		GLuint* pShaders = (GLuint*)malloc(sizeof(GLuint) * shaderCount);
+		if (pShaders)
+		{
+			glGetAttachedShaders(gUpdateNormalShaderProgram, shaderCount, &shaderCount, pShaders);
+
+			for (shaderNumber = 0; shaderNumber < shaderCount; shaderNumber++)
+			{
+				// detach shader
+				glDetachShader(gUpdateNormalShaderProgram, pShaders[shaderNumber]);
+
+				// delete shader
+				glDeleteShader(pShaders[shaderNumber]);
+				pShaders[shaderNumber] = 0;
+			}
+			free(pShaders);
+		}
+
+		glDeleteProgram(gUpdateNormalShaderProgram);
+		gUpdateNormalShaderProgram = 0;
+		glUseProgram(0);
+	}
+
+	if (gUpdateVertexShaderProgram)
+	{
+		GLsizei shaderCount;
+		GLsizei shaderNumber;
+
+		glUseProgram(gUpdateVertexShaderProgram);
+		glGetProgramiv(gUpdateVertexShaderProgram, GL_ATTACHED_SHADERS, &shaderCount);
+
+		GLuint *pShaders = (GLuint *)malloc(sizeof(GLuint) * shaderCount);
+		if (pShaders)
+		{
+			glGetAttachedShaders(gUpdateVertexShaderProgram, shaderCount, &shaderCount, pShaders);
+
+			for (shaderNumber = 0; shaderNumber < shaderCount; shaderNumber++)
+			{
+				// detach shader
+				glDetachShader(gUpdateVertexShaderProgram, pShaders[shaderNumber]);
+
+				// delete shader
+				glDeleteShader(pShaders[shaderNumber]);
+				pShaders[shaderNumber] = 0;
+			}
+			free(pShaders);
+		}
+
+		glDeleteProgram(gUpdateVertexShaderProgram);
+		gUpdateVertexShaderProgram = 0;
 		glUseProgram(0);
 
 	}
