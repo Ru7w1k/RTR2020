@@ -7,6 +7,8 @@
 
 #include "vmath.h"
 
+#include "resource.h"
+
 // Linker Options
 #pragma comment(lib, "glew32.lib")
 #pragma comment(lib, "opengl32.lib")
@@ -24,7 +26,8 @@ enum {
 	AMC_ATTRIBUTE_VELOCITY,
 	AMC_ATTRIBUTE_CONNECTION_1,
 	AMC_ATTRIBUTE_CONNECTION_2,
-	AMC_ATTRIBUTE_NORMAL
+	AMC_ATTRIBUTE_NORMAL,
+	AMC_ATTRIBUTE_TEXCOORD0
 };
 
 enum BUFFER_TYPE_t
@@ -35,7 +38,8 @@ enum BUFFER_TYPE_t
 	VELOCITY_B,
 	CONNECTION_1,
 	CONNECTION_2,
-	NORMAL
+	NORMAL,
+	TEXCOORD
 };
 
 enum
@@ -52,12 +56,15 @@ bool  gbActiveWindow = false;
 bool  gbIsFullScreen = false;
 bool  bWind = false;
 bool  bMesh = false;
+bool  bCloth = false;
+bool  bMove = false;
 HDC   ghDC = NULL;
 HGLRC ghRC = NULL;
 HWND  ghWnd = NULL;
 DWORD dwStyle;
 int gWidth;
 int gHeight;
+float t = 0.04f;
 
 WINDOWPLACEMENT wpPrev = { sizeof(WINDOWPLACEMENT) };
 
@@ -66,10 +73,11 @@ GLuint gUpdateNormalShaderProgram;
 GLuint gRenderShaderProgram;
 
 GLuint vao[2];			
-GLuint vbo[7]; // PosA, PosB, VelA, VelB, ConnA, ConnB, Norm			
+GLuint vbo[8]; // PosA, PosB, VelA, VelB, ConnA, ConnB, Norm, Tex			
 GLuint indexBuffer;
 GLuint pos_tbo[2]; // linked to vbo PosA and PosB respectively
 GLuint norm_tbo;   // linked to vbo Norm 
+GLuint texCloths[2];
 
 GLuint texPositionUniform;	
 
@@ -240,6 +248,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 			bMesh = !bMesh;
 			break;
 
+		case 'C':
+		case 'c':
+			bCloth = !bCloth;
+			break;
+
 		case '+':
 			if (iterations_per_frame < 1000)
 				iterations_per_frame += 100;
@@ -256,6 +269,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 	case WM_KEYDOWN:
 		switch (wParam)
 		{
+		case VK_SPACE:
+			bMove = !bMove;
+			break;
+
+		case VK_LEFT:
+			t -= 0.01f;
+			break;
+
+		case VK_RIGHT:
+			t += 0.01f;
+			break;
+
 		case VK_ESCAPE:
 			DestroyWindow(hwnd);
 			break;
@@ -327,7 +352,8 @@ int initialize(void)
 {
 	// function declarations
 	void resize(int, int);
-	void uninitialize(void);
+	void uninitialize(void); 
+	BOOL loadTexture(GLuint * texture, TCHAR imageResourceID[]);
 
 	// variable declarations
 	PIXELFORMATDESCRIPTOR pfd;
@@ -400,7 +426,7 @@ int initialize(void)
 		"in vec4 position_mass;" \
 
 		// this is the current velocity of the vertex
-		"in vec3 velocity;" \
+		"in vec4 velocity;" \
 
 		// this is our connection vector
 		"in ivec4 connection_1;" \
@@ -411,7 +437,7 @@ int initialize(void)
 
 		// the output of the vertex shader are the same as inputs
 		"out vec4 tf_position_mass;" \
-		"out vec3 tf_velocity;" \
+		"out vec4 tf_velocity;" \
 
 		// a uniform hold the timestep. the application can update this
 		"uniform float t = 0.000005 * 4;" \
@@ -420,7 +446,7 @@ int initialize(void)
 		"uniform float k = 5000.0;" \
 
 		// gravity 
-		"uniform vec3 gravity = vec3(0.0, -0.08, 0.0);" \
+		"uniform vec3 gravity = vec3(0.0, 0.0, 0.0);" \
 
 		// global damping constant
 		"uniform float c = 0.25;" \
@@ -432,37 +458,40 @@ int initialize(void)
 		"{" \
 		"	vec3 p = position_mass.xyz;    /* p can be our position */" \
 		"	float m = position_mass.w;     /* m is the mass of our vertex */ " \
-		"	vec3 u = velocity;             /* u is the initial velocity */" \
+		"	vec3 u = velocity.xyz;             /* u is the initial velocity */" \
 		"	vec3 F = vec3(0.0, -10.00, 0.0) * m - c * u;  /* F is the force on the mass */" \
 		"	bool fixed_node = true;        /* becomes false when force is applied */" \
 
 		"   F += gravity; " \
-
-		"	for (int i = 0; i < 4; i++)" \
-		"	{" \
-		"		if (connection_1[i] != -1)" \
+		
+		"   if (velocity.w >= 0.0f) " \
+		"   { " \
+		"		for (int i = 0; i < 4; i++)" \
 		"		{" \
-					// q is the position of the other vertex
-		"			vec3 q = texelFetch(tex_position, connection_1[i]).xyz;" \
-		"			vec3 d = q - p;" \
-		"			float x = length(d);" \
-		"			F += -k * (rest_length - x) * normalize(d);" \
-		"			fixed_node = false;" \
-		"		}" \
+		"			if (connection_1[i] != -1)" \
+		"			{" \
+						// q is the position of the other vertex
+		"				vec3 q = texelFetch(tex_position, connection_1[i]).xyz;" \
+		"				vec3 d = q - p;" \
+		"				float x = length(d);" \
+		"				F += -k * (rest_length - x) * normalize(d);" \
+		"				fixed_node = false;" \
+		"			}" \
 
-		"		if (connection_2[i] != -1)" \
-		"		{" \
-					// q is the position of the other vertex
-		"			vec3 q = texelFetch(tex_position, connection_2[i]).xyz;" \
-		"			vec3 d = q - p;" \
-		"			float x = length(d);" \
-		"			F += -k * ((1.414 * rest_length) - x) * normalize(d);" \
-		"			fixed_node = false;" \
+		"			if (connection_2[i] != -1)" \
+		"			{" \
+						// q is the position of the other vertex
+		"				vec3 q = texelFetch(tex_position, connection_2[i]).xyz;" \
+		"				vec3 d = q - p;" \
+		"				float x = length(d);" \
+		"				F += -k * ((1.414 * rest_length) - x) * normalize(d);" \
+		"				fixed_node = false;" \
+		"			}" \
 		"		}" \
 		"	}" \
 
 			// if this is a fixed node, reset the force to zero 
-		"	if (fixed_node)" \
+		"	else" \
 		"	{" \
 		"		F = vec3(0.0);" \
 		"	}" \
@@ -477,11 +506,11 @@ int initialize(void)
 		"	vec3 v = u + a * t;" \
 
 			// constrain the absolute value of the displacement per step
-		"	s = clamp(s, vec3(-15.0), vec3(15.0));" \
+		"	s = clamp(s, vec3(-25.0), vec3(25.0));" \
 
 			// write the outputs
 		"	tf_position_mass = vec4(p + s, m);" \
-		"	tf_velocity = v;" \
+		"	tf_velocity = vec4(v, velocity.w);" \
 		"}";
 
 	// attach source code to vertex shader
@@ -596,10 +625,18 @@ int initialize(void)
 		"	vec3 p = position_mass.xyz;    /* p can be our position */" \
 		"	vec3 n = vec3(0.0);" \
 
-			// find other two points of this triangle (RIGHT UP)
-		"	if (connection_1[2] != -1 && connection_1[3] != -1)" \
+			// find other two points of this triangle (RIGHT UPPERRIGHT)
+		"	if (connection_1[2] != -1 && connection_2[1] != -1)" \
 		"	{" \
 		"		vec3 q = texelFetch(tex_position, connection_1[2]).xyz - p;" \
+		"		vec3 r = texelFetch(tex_position, connection_2[1]).xyz - p;" \
+		"		n += cross(q, r);" \
+		"	}" \
+
+			// find other two points of this triangle (UPPERRIGHT UP)
+		"	if (connection_2[1] != -1 && connection_1[3] != -1)" \
+		"	{" \
+		"		vec3 q = texelFetch(tex_position, connection_2[1]).xyz - p;" \
 		"		vec3 r = texelFetch(tex_position, connection_1[3]).xyz - p;" \
 		"		n += cross(q, r);" \
 		"	}" \
@@ -620,18 +657,18 @@ int initialize(void)
 		"		n += cross(q, r);" \
 		"	}" \
 
-			// find other two points of this triangle (LEFT DOWN)
-		"	if (connection_1[0] != -1 && connection_1[1] != -1)" \
+			// find other two points of this triangle (LEFT LOWERLEFT)
+		"	if (connection_1[0] != -1 && connection_2[0] != -1)" \
 		"	{" \
 		"		vec3 q = texelFetch(tex_position, connection_1[0]).xyz - p;" \
-		"		vec3 r = texelFetch(tex_position, connection_1[1]).xyz - p;" \
+		"		vec3 r = texelFetch(tex_position, connection_2[0]).xyz - p;" \
 		"		n += cross(q, r);" \
 		"	}" \
 
-			// find other two points of this triangle (LEFT DOWN)
-		"	if (connection_1[0] != -1 && connection_1[1] != -1)" \
+			// find other two points of this triangle (LOWERLEFT DOWN)
+		"	if (connection_2[0] != -1 && connection_1[1] != -1)" \
 		"	{" \
-		"		vec3 q = texelFetch(tex_position, connection_1[0]).xyz - p;" \
+		"		vec3 q = texelFetch(tex_position, connection_2[0]).xyz - p;" \
 		"		vec3 r = texelFetch(tex_position, connection_1[1]).xyz - p;" \
 		"		n += cross(q, r);" \
 		"	}" \
@@ -652,7 +689,7 @@ int initialize(void)
 		"		n += cross(q, r);" \
 		"	}" \
 
-		// write the outputs
+			// write the outputs
 		"	tf_normal = normalize(n);" \
 		"}";
 
@@ -749,16 +786,18 @@ int initialize(void)
 
 		"in vec4 position;" \
 		"in vec3 normal;" \
+		"in vec2 texcoord;" \
 
 		"uniform float front;" \
 		"uniform mat4 u_m_matrix;" \
 		"uniform mat4 u_v_matrix;" \
 		"uniform mat4 u_p_matrix;" \
-		"uniform vec4 u_light_position = vec4(10.0f, 0.0f, 10.0f, 1.0f);" \
+		"uniform vec4 u_light_position = vec4(0.0f, 0.0f, 10.0f, 1.0f);" \
 
 		"out vec3 tnorm;" \
 		"out vec3 light_direction;" \
 		"out vec3 viewer_vector;" \
+		"out vec2 out_Texcoord;" \
 
 		"void main()" \
 		"{" \
@@ -770,6 +809,7 @@ int initialize(void)
 		"   viewer_vector = vec3(-eye_coordinates.xyz);" \
 
 		"	gl_Position = u_p_matrix * u_v_matrix * u_m_matrix * vec4(position.xyz , 1.0);" \
+		"   out_Texcoord = texcoord;" \
 		"}";
 
 	// attach source code to vertex shader
@@ -814,6 +854,7 @@ int initialize(void)
 		"in vec3 tnorm;" \
 		"in vec3 light_direction;" \
 		"in vec3 viewer_vector;" \
+		"in vec2 out_Texcoord;" \
 
 		"uniform vec3 u_la = vec3(0.4, 0.4, 0.4);" \
 		"uniform vec3 u_ld = vec3(0.8, 0.8, 0.8);" \
@@ -822,6 +863,8 @@ int initialize(void)
 		"uniform vec3 u_kd = vec3(0.8, 0.8, 0.8);" \
 		"uniform vec3 u_ks = vec3(1.0, 1.0, 1.0);" \
 		"uniform float u_shininess = 25.0;" \
+
+		"uniform sampler2D u_sampler;" \
 		
 		"out vec4 FragColor;" \
 
@@ -832,11 +875,14 @@ int initialize(void)
 		"   vec3 nviewer_vector = normalize(viewer_vector);" \
 		"   vec3 reflection_vector = reflect(-nlight_direction, ntnorm);" \
 		"   float tn_dot_ldir = max(dot(ntnorm, nlight_direction), 0.0);" \
+		
 		"   vec3 ambient  = u_la * u_ka;" \
 		"   vec3 diffuse  = u_ld * u_kd * tn_dot_ldir;" \
 		"   vec3 specular = u_ls * u_ks * pow(max(dot(reflection_vector, nviewer_vector), 0.0), u_shininess);" \
+		
 		"   vec3 phong_ads_light = ambient + diffuse;" \
-		"   FragColor = vec4(phong_ads_light, 1.0);" \
+		
+		"   FragColor = vec4(phong_ads_light, 1.0) *  texture(u_sampler, out_Texcoord);" \
 		"}";
 
 	// attach source code to fragment shader
@@ -882,6 +928,7 @@ int initialize(void)
 	// pre-linking binding to vertex attribute
 	glBindAttribLocation(gRenderShaderProgram, AMC_ATTRIBUTE_POSITION_MASS, "position");
 	glBindAttribLocation(gRenderShaderProgram, AMC_ATTRIBUTE_NORMAL, "normal");
+	glBindAttribLocation(gRenderShaderProgram, AMC_ATTRIBUTE_TEXCOORD0, "texcoord");
 
 	// link the shader program
 	glLinkProgram(gRenderShaderProgram);
@@ -917,7 +964,8 @@ int initialize(void)
 
 	vec4 *initial_positions = new vec4[POINTS_TOTAL];
 	vec3 *initial_normals = new vec3[POINTS_TOTAL];
-	vec3 *initial_velocities = new vec3[POINTS_TOTAL];
+	vec2 *initial_texcoords = new vec2[POINTS_TOTAL];
+	vec4 *initial_velocities = new vec4[POINTS_TOTAL];
 	ivec4 *connection_vectors_1 = new ivec4[POINTS_TOTAL];
 	ivec4 *connection_vectors_2 = new ivec4[POINTS_TOTAL];
 
@@ -935,39 +983,44 @@ int initialize(void)
 				                        (fj - 0.5f) * (float)POINTS_Y,
 				                        1.0);
 
-			initial_velocities[n] = vec3(0.0f);
+			initial_velocities[n] = vec4(0.0f);
 			initial_normals[n] = vec3(0.0f);
 			connection_vectors_1[n] = ivec4(-1);
 			connection_vectors_2[n] = ivec4(-1);
 
 			// straight connections (left down right up)
-			if (j != (POINTS_Y - 1) || i % 7 != 0)
-			{
-				if (i != 0)
-					connection_vectors_1[n][0] = n - 1;
+			if (i != 0)
+				connection_vectors_1[n][0] = n - 1;
 
-				if (j != 0)
-					connection_vectors_1[n][1] = n - POINTS_X;
+			if (j != 0)
+				connection_vectors_1[n][1] = n - POINTS_X;
 
-				if (i != (POINTS_X - 1))
-					connection_vectors_1[n][2] = n + 1;
+			if (i != (POINTS_X - 1))
+				connection_vectors_1[n][2] = n + 1;
 
-				if (j != (POINTS_Y - 1))
-					connection_vectors_1[n][3] = n + POINTS_X;
+			if (j != (POINTS_Y - 1))
+				connection_vectors_1[n][3] = n + POINTS_X;
 
-				// diagonal connections 
-				if (i > 0 && j > 0) /* lower left */
-					connection_vectors_2[n][0] = n - 1 - POINTS_X;
+			// diagonal connections 
+			if (i > 0 && j > 0) /* lower left */
+				connection_vectors_2[n][0] = n - 1 - POINTS_X;
 
-				if (i < (POINTS_X - 1) && j < (POINTS_Y - 1)) /* upper right */
-					connection_vectors_2[n][1] = n + 1 + POINTS_X;
+			if (i < (POINTS_X - 1) && j < (POINTS_Y - 1)) /* upper right */
+				connection_vectors_2[n][1] = n + 1 + POINTS_X;
 
-				if (i < (POINTS_X - 1) && j > 0) /* lower right */
-					connection_vectors_2[n][2] = n + 1 - POINTS_X;
+			if (i < (POINTS_X - 1) && j > 0) /* lower right */
+				connection_vectors_2[n][2] = n + 1 - POINTS_X;
 
-				if (i > 0 && j < (POINTS_Y - 1)) /* upper left */
-					connection_vectors_2[n][3] = n - 1 + POINTS_X;
-			}
+			if (i > 0 && j < (POINTS_Y - 1)) /* upper left */
+				connection_vectors_2[n][3] = n - 1 + POINTS_X;
+
+			// stable points
+			if (j == (POINTS_Y - 1) && i % 7 == 0)
+				initial_velocities[n][3] = -1.0f;
+
+			// texture coords
+			initial_texcoords[n][0] = fi * 5.0f;
+			initial_texcoords[n][1] = fj * 5.0f;
 
 			n++;
 
@@ -976,7 +1029,7 @@ int initialize(void)
 
 	// create vaos and vbos
 	glGenVertexArrays(2, vao);
-	glGenBuffers(7, vbo);
+	glGenBuffers(8, vbo);
 
 	for (i = 0; i < 2; i++)
 	{
@@ -988,8 +1041,8 @@ int initialize(void)
 		glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION_MASS);
 
 		glBindBuffer(GL_ARRAY_BUFFER, vbo[VELOCITY_A + i]);
-		glBufferData(GL_ARRAY_BUFFER, POINTS_TOTAL * sizeof(vec3), initial_velocities, GL_DYNAMIC_COPY);
-		glVertexAttribPointer(AMC_ATTRIBUTE_VELOCITY, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+		glBufferData(GL_ARRAY_BUFFER, POINTS_TOTAL * sizeof(vec4), initial_velocities, GL_DYNAMIC_COPY);
+		glVertexAttribPointer(AMC_ATTRIBUTE_VELOCITY, 4, GL_FLOAT, GL_FALSE, 0, NULL);
 		glEnableVertexAttribArray(AMC_ATTRIBUTE_VELOCITY);
 
 		glBindBuffer(GL_ARRAY_BUFFER, vbo[CONNECTION_1]);
@@ -1006,6 +1059,11 @@ int initialize(void)
 		glBufferData(GL_ARRAY_BUFFER, POINTS_TOTAL * sizeof(vec3), initial_normals, GL_DYNAMIC_COPY);
 		glVertexAttribPointer(AMC_ATTRIBUTE_NORMAL, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 		glEnableVertexAttribArray(AMC_ATTRIBUTE_NORMAL);
+
+		glBindBuffer(GL_ARRAY_BUFFER, vbo[TEXCOORD]);
+		glBufferData(GL_ARRAY_BUFFER, POINTS_TOTAL * sizeof(vec2), initial_texcoords, GL_STATIC_DRAW);
+		glVertexAttribPointer(AMC_ATTRIBUTE_TEXCOORD0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+		glEnableVertexAttribArray(AMC_ATTRIBUTE_TEXCOORD0);
 	}
 
 	delete[] initial_positions;
@@ -1095,6 +1153,11 @@ int initialize(void)
 	// clear the screen by OpenGL
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
+	// textures
+	glEnable(GL_TEXTURE_2D);
+	loadTexture(&texCloths[0], MAKEINTRESOURCE(IDBITMAP_CLOTH1));
+	loadTexture(&texCloths[1], MAKEINTRESOURCE(IDBITMAP_CLOTH2));
+
 	perspectiveProjectionMatrix = mat4::identity();
 
 	// warm-up call to resize
@@ -1118,19 +1181,17 @@ void resize(int width, int height)
 	perspectiveProjectionMatrix = perspective(60.0, (float)width / (float)height, 0.1f, 1000.0f);
 }
 
-
 void display(void)
 {
 	int i;
 	static int iteration_index = 0;
-	static float t = 0.0f;
 
 	glUseProgram(gUpdateVertexShaderProgram);
 
 	if (bWind)
 	{
 		glUniform3fv(glGetUniformLocation(gUpdateVertexShaderProgram, "gravity"),
-			1, vec3(0.0f, 0.0f, 5.0f));
+			1, vec3(0.0f, 0.0f, 10.0f));
 	} 
 	else
 	{
@@ -1183,11 +1244,12 @@ void display(void)
 	
 	/*glPointSize(4.0f);
 	glDrawArrays(GL_POINTS, 0, POINTS_TOTAL);*/
-
 	mat4 mMatrix = mat4::identity();
+	mMatrix *= rotate(0.0f, 100.0f*sinf(t), 0.0f);
+
 	mat4 vMatrix = mat4::identity();
 	vMatrix *= lookat(
-		vec3(80.0f*cosf(t), 0.0f, 80.0f*sinf(t)),
+		vec3(0, 0.0f, 80.0f),
 		vec3(0.0f, 0.0f, 0.0f), 
 		vec3(0.0f, 1.0f, 0.0f));
 
@@ -1197,14 +1259,19 @@ void display(void)
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
 	//glDrawElements(GL_LINES, CONNECTIONS_TOTAL * 2, GL_UNSIGNED_INT, NULL);
 
-	if (bMesh)
+	if (bMesh) 
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-	else
+	else 
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-	int lines = (POINTS_X * (POINTS_Y - 1)) + POINTS_X;
+	glActiveTexture(GL_TEXTURE0);
+	if (bCloth) 
+		glBindTexture(GL_TEXTURE_2D, texCloths[0]);
+	else 
+		glBindTexture(GL_TEXTURE_2D, texCloths[1]);
 
 	// front side
+	int lines = (POINTS_X * (POINTS_Y - 1)) + POINTS_X;
 	glUniform1f(glGetUniformLocation(gRenderShaderProgram, "front"), -1.0f);
 	glCullFace(GL_BACK);
 	glDrawElements(GL_TRIANGLE_STRIP, lines * 2, GL_UNSIGNED_INT, NULL);
@@ -1215,7 +1282,7 @@ void display(void)
 	glDrawElements(GL_TRIANGLE_STRIP, lines * 2, GL_UNSIGNED_INT, NULL);
 
 	SwapBuffers(ghDC);
-	t += 0.001f;
+	if(bMove) t += 0.001f;
 }
 
 void update(void)
@@ -1367,5 +1434,44 @@ void uninitialize(void)
 		fclose(gpFile);
 		gpFile = NULL;
 	}
+}
+
+// Convert image resource to image data
+BOOL loadTexture(GLuint* texture, TCHAR imageResourceID[])
+{
+	// variables
+	HBITMAP hBitmap = NULL;
+	BITMAP bmp;
+	BOOL bStatus = false;
+
+	// data
+	hBitmap = (HBITMAP)LoadImage(GetModuleHandle(NULL),
+		imageResourceID,
+		IMAGE_BITMAP,
+		0, 0,
+		LR_CREATEDIBSECTION
+	);
+
+	if (hBitmap)
+	{
+		bStatus = TRUE;
+		GetObject(hBitmap, sizeof(BITMAP), &bmp);
+
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+		glGenTextures(1, texture);
+		glBindTexture(GL_TEXTURE_2D, *texture);
+
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, bmp.bmWidth, bmp.bmHeight, 0, GL_BGR, GL_UNSIGNED_BYTE, bmp.bmBits);
+		glGenerateMipmap(GL_TEXTURE_2D);
+
+		glBindTexture(GL_TEXTURE_2D, 0);
+
+		DeleteObject(hBitmap);
+	}
+
+	return bStatus;
 }
 
