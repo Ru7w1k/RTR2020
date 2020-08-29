@@ -2,10 +2,12 @@
 #include <windows.h>
 #include <stdio.h>
 #include <gl/GL.h>
+#include <gl/GLU.h>
 
 #include "OGLTemplate.h"
 
 #pragma comment(lib, "opengl32.lib")
+#pragma comment(lib, "glu32.lib")
 
 // macros
 #define WIN_WIDTH  800
@@ -24,9 +26,13 @@ bool gbActiveWindow = false;
 HWND  ghwnd  = NULL;
 FILE* gpFile = NULL;
 
+int gWidth;
+int gHeight;
+
+int gCase;
+
 DWORD dwStyle;
 WINDOWPLACEMENT wpPrev = { sizeof(WINDOWPLACEMENT) };
-
 
 // WinMain()
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLine, int iCmdShow)
@@ -49,7 +55,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 		MessageBox(NULL, TEXT("Cannot open RMCLog.txt file.."), TEXT("Error"), MB_OK | MB_ICONERROR);
 		exit(0);
 	}
-	fprintf(gpFile, "==== Application Started ====\n");
+	else
+	{
+		fprintf(gpFile, "==== Application Started ====\n");
+	}
 
 	// initialization of WNDCLASSEX
 	wndclass.cbSize = sizeof(WNDCLASSEX);
@@ -75,7 +84,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 	// create window
 	hwnd = CreateWindowEx(WS_EX_APPWINDOW,
 		szAppName,
-		TEXT("OpenGL | Transformation"),
+		TEXT("OpenGL | Spinning Triangle"),
 		WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE,
 		(width / 2) - 400,
 		(height / 2) - 300,
@@ -111,10 +120,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 		{
 			if (gbActiveWindow == true)
 			{
-				// call update() here for OpenGL rendering
-
 				// call display() here for OpenGL rendering
 				display();
+
+				// call update() here for OpenGL rendering
 			}
 		}
 	}
@@ -149,12 +158,61 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 	case WM_KEYDOWN:
 		switch (wParam)
 		{
+		case 0x30: /* normal case */
+		case VK_NUMPAD0:
+			gCase = 0; 
+			break;
+
+		case 0x31: /* upper left case */
+		case VK_NUMPAD1:
+			gCase = 1; 
+			break;
+
+		case 0x32: /* upper right case */
+		case VK_NUMPAD2:
+			gCase = 2; 
+			break;
+
+		case 0x33: /* lower right case */
+		case VK_NUMPAD3:
+			gCase = 3; 
+			break;
+
+		case 0x34: /* lower left case */
+		case VK_NUMPAD4:
+			gCase = 4; 
+			break;
+
+		case 0x35: /* left half case */
+		case VK_NUMPAD5:
+			gCase = 5; 
+			break;
+
+		case 0x36: /* right half case */
+		case VK_NUMPAD6:
+			gCase = 6; 
+			break;
+
+		case 0x37: /* top half case */
+		case VK_NUMPAD7:
+			gCase = 7; 
+			break;
+
+		case 0x38: /* bottom half case */
+		case VK_NUMPAD8:
+			gCase = 8; 
+			break;
+
+		case 0x39: /* center case */
+		case VK_NUMPAD9:
+			gCase = 9; 
+			break;
+
 		case VK_ESCAPE:
 			DestroyWindow(hwnd);
 			break;
 
 		case 0x46:
-		case 0x66:
 			ToggleFullscreen();
 			break;
 
@@ -274,7 +332,7 @@ void initialize(void)
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
 	// warm-up resize call
-	// resize(WIN_WIDTH, WIN_HEIGHT);
+	resize(WIN_WIDTH, WIN_HEIGHT);
 }
 
 void resize(int width, int height)
@@ -283,80 +341,84 @@ void resize(int width, int height)
 	if (height == 0)
 		height = 1;
 
-	glViewport(0, 0, (GLsizei)width, (GLsizei)height);	
+	gWidth = width;
+	gHeight = height;
 
-	// glMatrixMode(GL_PROJECTION);
-	// glLoadIdentity();
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	
+	gluPerspective(45.0f, (GLfloat)width/(GLfloat)height, 0.1f, 100.0f);
+	
 }
 
 void display(void)
 {
-	// function declarations
-	void WhiteColorTriangle(void);
-	void MultiColorTriangle(void);
-	void WhiteColorRectangle(void);
-
 	// code
 	glClear(GL_COLOR_BUFFER_BIT);
 
+	// set viewport
+		switch(gCase)
+	{
+		case 0: /* normal case */
+			glViewport(0, 0, gWidth, gHeight);
+			break;
+
+		case 1: /* upper left case */
+			glViewport(0, gHeight/2, gWidth/2, gHeight/2);
+			break;
+
+		case 2: /* upper right case */
+			glViewport(gWidth/2, gHeight/2, gWidth/2, gHeight/2);
+			break;
+
+		case 3: /* lower right case */
+			glViewport(gWidth/2, 0, gWidth/2, gHeight/2);
+			break;
+
+		case 4: /* lower left case */
+			glViewport(0, 0, gWidth/2, gHeight/2);
+			break;
+
+		case 5: /* left half case */
+			glViewport(0, 0, gWidth/2, gHeight);
+			break;
+
+		case 6: /* right half case */
+			glViewport(gWidth/2, 0, gWidth/2, gHeight);
+			break;
+
+		case 7: /* top half case */
+			glViewport(0, gHeight/2, gWidth, gHeight/2);
+			break;
+
+		case 8: /* bottom half case */
+			glViewport(0, 0, gWidth, gHeight/2);
+			break;
+
+		case 9: /* center case */
+			glViewport(gWidth/4, gHeight/4, gWidth/2, gHeight/2);
+			break;
+	}
+
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
-	
-	WhiteColorTriangle();
 
-	glTranslatef(0.5f, 0.0f, 0.0f);
-	MultiColorTriangle();
+	glTranslatef(0.0f, 0.0f, -3.0f);
 
-	glTranslatef(0.0f, 0.5f, 0.0f);
-	WhiteColorRectangle();
-
-
-	SwapBuffers(ghdc);
-}
-
-void WhiteColorTriangle(void)
-{
-	// code
 	glBegin(GL_TRIANGLES);
-	{
-		glVertex3f(0.0f, 0.1f, 0.0f);
-		glVertex3f(-0.1f, -0.1f, 0.0f);
-		glVertex3f(0.1f, -0.1f, 0.0f);
-	}
-	glEnd();
-}
 
-void MultiColorTriangle(void)
-{
-	// code
-	glBegin(GL_TRIANGLES);
-	{
 		glColor3f(1.0f, 0.0f, 0.0f);
-		glVertex3f(0.0f, 0.1f, 0.0f);
+		glVertex3f(0.0f, 1.0f, 0.0f);
 
 		glColor3f(0.0f, 1.0f, 0.0f);
-		glVertex3f(-0.1f, -0.1f, 0.0f);
+		glVertex3f(-1.0f, -1.0f, 0.0f);
 
 		glColor3f(0.0f, 0.0f, 1.0f);
-		glVertex3f(0.1f, -0.1f, 0.0f);
-	}
+		glVertex3f(1.0f, -1.0f, 0.0f);
+
 	glEnd();
-}
 
-void WhiteColorRectangle(void)
-{
-	// code
-	glBegin(GL_QUADS);
-	{
-		glColor3f(1.0f, 1.0f, 1.0f);
-
-		glVertex3f(0.1f, 0.1f, 0.0f);
-		glVertex3f(-0.1f, 0.1f, 0.0f);
-		glVertex3f(-0.1f, -0.1f, 0.0f);
-		glVertex3f(0.1f, -0.1f, 0.0f);	
-
-	}
-	glEnd();
+	SwapBuffers(ghdc);
 }
 
 void uninitialize(void)

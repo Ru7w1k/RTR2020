@@ -2,10 +2,12 @@
 #include <windows.h>
 #include <stdio.h>
 #include <gl/GL.h>
+#include <gl/GLU.h>
 
 #include "OGLTemplate.h"
 
 #pragma comment(lib, "opengl32.lib")
+#pragma comment(lib, "glu32.lib")
 
 // macros
 #define WIN_WIDTH  800
@@ -27,6 +29,7 @@ FILE* gpFile = NULL;
 DWORD dwStyle;
 WINDOWPLACEMENT wpPrev = { sizeof(WINDOWPLACEMENT) };
 
+GLfloat angle = 0.0f;
 
 // WinMain()
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLine, int iCmdShow)
@@ -34,6 +37,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 	// function declarations
 	void initialize(void);
 	void display(void);
+	void update(void);
 
 	// variable declarations
 	bool bDone = false;
@@ -49,7 +53,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 		MessageBox(NULL, TEXT("Cannot open RMCLog.txt file.."), TEXT("Error"), MB_OK | MB_ICONERROR);
 		exit(0);
 	}
-	fprintf(gpFile, "==== Application Started ====\n");
+	else
+	{
+		fprintf(gpFile, "==== Application Started ====\n");
+	}
 
 	// initialization of WNDCLASSEX
 	wndclass.cbSize = sizeof(WNDCLASSEX);
@@ -75,7 +82,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 	// create window
 	hwnd = CreateWindowEx(WS_EX_APPWINDOW,
 		szAppName,
-		TEXT("OpenGL | Transformation"),
+		TEXT("OpenGL | Update Discipline 03"),
 		WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE,
 		(width / 2) - 400,
 		(height / 2) - 300,
@@ -111,10 +118,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 		{
 			if (gbActiveWindow == true)
 			{
-				// call update() here for OpenGL rendering
-
 				// call display() here for OpenGL rendering
 				display();
+
+				// call update() here for OpenGL rendering
+				update();
 			}
 		}
 	}
@@ -274,7 +282,7 @@ void initialize(void)
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
 	// warm-up resize call
-	// resize(WIN_WIDTH, WIN_HEIGHT);
+	resize(WIN_WIDTH, WIN_HEIGHT);
 }
 
 void resize(int width, int height)
@@ -285,78 +293,45 @@ void resize(int width, int height)
 
 	glViewport(0, 0, (GLsizei)width, (GLsizei)height);	
 
-	// glMatrixMode(GL_PROJECTION);
-	// glLoadIdentity();
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	
+	gluPerspective(45.0f, (GLfloat)width/(GLfloat)height, 0.1f, 100.0f);
+	
 }
 
 void display(void)
 {
-	// function declarations
-	void WhiteColorTriangle(void);
-	void MultiColorTriangle(void);
-	void WhiteColorRectangle(void);
-
 	// code
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
-	
-	WhiteColorTriangle();
 
-	glTranslatef(0.5f, 0.0f, 0.0f);
-	MultiColorTriangle();
+	glTranslatef(0.0f, 0.0f, -3.0f);
+	glRotatef(angle, 0.0f, 1.0f, 0.0f);
 
-	glTranslatef(0.0f, 0.5f, 0.0f);
-	WhiteColorRectangle();
+	glBegin(GL_TRIANGLES);
 
+		glColor3f(1.0f, 0.0f, 0.0f);
+		glVertex3f(0.0f, 1.0f, 0.0f);
+
+		glColor3f(0.0f, 1.0f, 0.0f);
+		glVertex3f(-1.0f, -1.0f, 0.0f);
+
+		glColor3f(0.0f, 0.0f, 1.0f);
+		glVertex3f(1.0f, -1.0f, 0.0f);
+
+	glEnd();
 
 	SwapBuffers(ghdc);
 }
 
-void WhiteColorTriangle(void)
+void update(void)
 {
-	// code
-	glBegin(GL_TRIANGLES);
-	{
-		glVertex3f(0.0f, 0.1f, 0.0f);
-		glVertex3f(-0.1f, -0.1f, 0.0f);
-		glVertex3f(0.1f, -0.1f, 0.0f);
-	}
-	glEnd();
-}
-
-void MultiColorTriangle(void)
-{
-	// code
-	glBegin(GL_TRIANGLES);
-	{
-		glColor3f(1.0f, 0.0f, 0.0f);
-		glVertex3f(0.0f, 0.1f, 0.0f);
-
-		glColor3f(0.0f, 1.0f, 0.0f);
-		glVertex3f(-0.1f, -0.1f, 0.0f);
-
-		glColor3f(0.0f, 0.0f, 1.0f);
-		glVertex3f(0.1f, -0.1f, 0.0f);
-	}
-	glEnd();
-}
-
-void WhiteColorRectangle(void)
-{
-	// code
-	glBegin(GL_QUADS);
-	{
-		glColor3f(1.0f, 1.0f, 1.0f);
-
-		glVertex3f(0.1f, 0.1f, 0.0f);
-		glVertex3f(-0.1f, 0.1f, 0.0f);
-		glVertex3f(-0.1f, -0.1f, 0.0f);
-		glVertex3f(0.1f, -0.1f, 0.0f);	
-
-	}
-	glEnd();
+	angle += 1.0f;
+	if (angle >= 360.0f)
+		angle = 0.0f;
 }
 
 void uninitialize(void)
