@@ -443,13 +443,13 @@ int initialize(void)
 		"uniform float t = 0.000005 * 4;" \
 		
 		// the global spring constant
-		"uniform float k = 5000.0;" \
+		"uniform float k = 6000.0;" \
 
-		// gravity 
-		"uniform vec3 gravity = vec3(0.0, 0.0, 0.0);" \
+		// wind 
+		"uniform vec3 wind = vec3(0.0, 0.0, 0.0);" \
 
 		// global damping constant
-		"uniform float c = 0.25;" \
+		"uniform float c = 0.55;" \
 
 		// spring resting length
 		"uniform float rest_length = 1.00;" \
@@ -462,7 +462,7 @@ int initialize(void)
 		"	vec3 F = vec3(0.0, -10.00, 0.0) * m - c * u;  /* F is the force on the mass */" \
 		"	bool fixed_node = true;        /* becomes false when force is applied */" \
 
-		"   F += gravity; " \
+		"   F += wind; " \
 		
 		"   if (velocity.w >= 0.0f) " \
 		"   { " \
@@ -1019,8 +1019,8 @@ int initialize(void)
 				initial_velocities[n][3] = -1.0f;
 
 			// texture coords
-			initial_texcoords[n][0] = fi * 5.0f;
-			initial_texcoords[n][1] = fj * 5.0f;
+			initial_texcoords[n][0] = fi * 1.0f;
+			initial_texcoords[n][1] = fj * 1.0f;
 
 			n++;
 
@@ -1190,12 +1190,12 @@ void display(void)
 
 	if (bWind)
 	{
-		glUniform3fv(glGetUniformLocation(gUpdateVertexShaderProgram, "gravity"),
-			1, vec3(0.0f, 0.0f, 10.0f));
+		glUniform3fv(glGetUniformLocation(gUpdateVertexShaderProgram, "wind"),
+			1, vec3(5.0f, 1.0f, 10.0f));
 	} 
 	else
 	{
-		glUniform3fv(glGetUniformLocation(gUpdateVertexShaderProgram, "gravity"),
+		glUniform3fv(glGetUniformLocation(gUpdateVertexShaderProgram, "wind"),
 			1, vec3(0.0f, 0.0f, 0.0f));
 	}
 
@@ -1256,8 +1256,6 @@ void display(void)
 	glUniformMatrix4fv(glGetUniformLocation(gRenderShaderProgram, "u_m_matrix"), 1, GL_FALSE, mMatrix);
 	glUniformMatrix4fv(glGetUniformLocation(gRenderShaderProgram, "u_v_matrix"), 1, GL_FALSE, vMatrix);
 	glUniformMatrix4fv(glGetUniformLocation(gRenderShaderProgram, "u_p_matrix"), 1, GL_FALSE, perspectiveProjectionMatrix);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
-	//glDrawElements(GL_LINES, CONNECTIONS_TOTAL * 2, GL_UNSIGNED_INT, NULL);
 
 	if (bMesh) 
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -1270,8 +1268,11 @@ void display(void)
 	else 
 		glBindTexture(GL_TEXTURE_2D, texCloths[1]);
 
-	// front side
+	
 	int lines = (POINTS_X * (POINTS_Y - 1)) + POINTS_X;
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+	
+	// front side
 	glUniform1f(glGetUniformLocation(gRenderShaderProgram, "front"), -1.0f);
 	glCullFace(GL_BACK);
 	glDrawElements(GL_TRIANGLE_STRIP, lines * 2, GL_UNSIGNED_INT, NULL);

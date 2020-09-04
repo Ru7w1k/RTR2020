@@ -199,6 +199,7 @@ LPNODE DeleteNode(LPNODE head, int key)
 	if (tmp != NULL) 
 	{
 		/* tmp is not Head */
+		
 		if (tmp != head)
 		{
 			prev->next = tmp->next;

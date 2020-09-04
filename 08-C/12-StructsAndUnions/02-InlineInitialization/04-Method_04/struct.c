@@ -21,7 +21,7 @@ int main(void)
     struct MyData data_one_rmc = {35, 3.9f, 1.12313, 'B'}; // inline initialization
 
     // A will be assigned to 'i' of 'data_two': but 'A' is char so its ASCII value will be assignmed
-    // 4.9 will be assigned to 'f' of 'data_two'
+    // 4.9 will be passigned to 'f' of 'data_two'
     // 541.313 will be assigned to 'd' of 'data_two'
     // 69 will be assigned to 'c' of 'data_two': but 69 is int so it is considered as ASCII value (d)
     struct MyData data_two_rmc = { 'A', 4.9f, 541.313, 69}; // inline initialization
