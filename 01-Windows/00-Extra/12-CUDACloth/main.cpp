@@ -9,6 +9,7 @@
 #include <cuda_runtime.h>
 
 #include "vmath.h"
+#include "resource.h"
 
 // Linker Options
 #pragma comment(lib, "glew32.lib")
@@ -56,10 +57,13 @@ float vel2[gMeshWidth][gMeshHeight][4];
 struct cudaGraphicsResource *graphicsResource[5] = {0};
 GLuint vao;
 GLuint vbo;
-GLuint vbo_gpu[5];
+GLuint vbo_norm;
+GLuint vbo_gpu[6];
 GLuint vbo_index;
+GLuint texCloths[2];
 float animationTime = 0.0f;
 bool bOnGPU = true;
+bool bWind = false;
 cudaError_t error;
 bool bAnimation = true;
 GLuint mvpUniform;
@@ -221,6 +225,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 			bOnGPU = true;
 			break;
 
+		case 'W':
+		case 'w':
+			bWind = !bWind;
+			break;
+
 		case 'C':
 		case 'c':
 			bOnGPU = false;
@@ -313,6 +322,8 @@ int initialize(void)
 	// function declarations
 	void resize(int, int);
 	void uninitialize(void);
+	BOOL loadTexture(GLuint*, TCHAR[]);
+
 
 	// variable declarations
 	PIXELFORMATDESCRIPTOR pfd;
@@ -504,7 +515,8 @@ int initialize(void)
 		
 		"   vec3 phong_ads_light = ambient + diffuse;" \
 		
-		"   FragColor = vec4(phong_ads_light, 1.0);" \
+		"   FragColor = vec4(phong_ads_light, 1.0) * texture(u_sampler, out_Texcoord);" \
+		"   FragColor = vec4(1.0);" \
 		"}";
 
 	// attach source code to fragment shader
@@ -625,8 +637,12 @@ int initialize(void)
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
 	glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE*sizeof(float), NULL, GL_DYNAMIC_DRAW);
 
+	glGenBuffers(1, &vbo_norm);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo_norm);
+	glBufferData(GL_ARRAY_BUFFER, gMeshTotal*3*sizeof(float), NULL, GL_DYNAMIC_DRAW);
+
 	// vertex positions
-	glGenBuffers(5, vbo_gpu);
+	glGenBuffers(6, vbo_gpu);
 	
 	// pos1 and pos2
 	for(int i = 0; i < 2; i++)
@@ -663,8 +679,6 @@ int initialize(void)
 	// normals
 	glBindBuffer(GL_ARRAY_BUFFER, vbo_gpu[4]);
 	glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE*sizeof(float), initial_normals, GL_DYNAMIC_DRAW);
-	glVertexAttribPointer(AMC_ATTRIBUTE_NORMAL, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-	glEnableVertexAttribArray(AMC_ATTRIBUTE_NORMAL);
  
 	// register our vbo with cuda graphics resource
 	error = cudaGraphicsGLRegisterBuffer(&graphicsResource[4], vbo_gpu[4], cudaGraphicsMapFlagsWriteDiscard);
@@ -675,6 +689,11 @@ int initialize(void)
 		DestroyWindow(ghWnd);
 	}
 
+	// texcoords
+	glBindBuffer(GL_ARRAY_BUFFER, vbo_gpu[5]);
+	glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE*sizeof(float), initial_texcoords, GL_DYNAMIC_DRAW);
+	glVertexAttribPointer(AMC_ATTRIBUTE_TEXCOORD0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+	glEnableVertexAttribArray(AMC_ATTRIBUTE_TEXCOORD0);
 
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
@@ -701,6 +720,11 @@ int initialize(void)
 
 	glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
 
+	delete []initial_positions;
+	delete []initial_velocities;
+	delete []initial_normals;
+	delete []initial_texcoords;
+
 	//////////////////////////////////////////////////////////////////////
 
 	// clear the depth buffer
@@ -720,6 +744,11 @@ int initialize(void)
 	
 	// clear the screen by OpenGL
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+	// textures
+	glEnable(GL_TEXTURE_2D);
+	loadTexture(&texCloths[0], MAKEINTRESOURCE(IDBITMAP_CLOTH1));
+	loadTexture(&texCloths[1], MAKEINTRESOURCE(IDBITMAP_CLOTH2));
 
 	perspectiveProjectionMatrix = mat4::identity();
 
@@ -745,8 +774,8 @@ void resize(int width, int height)
 void display(void)
 {
 	void uninitialize(void);
-	void launchCUDAKernel(float4 *, float4 *, float4 *, float4 *, unsigned int, unsigned int, float3 *);
-	void launchCPUKernel(unsigned int, unsigned int, float);
+	void launchCUDAKernel(float4 *, float4 *, float4 *, float4 *, unsigned int, unsigned int, float3 *, float3);
+	void launchCPUKernel(unsigned int, unsigned int, vec3);
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -765,6 +794,10 @@ void display(void)
 	glUniformMatrix4fv(glGetUniformLocation(gShaderProgramObject, "u_m_matrix"), 1, GL_FALSE, mMatrix);
 	glUniformMatrix4fv(glGetUniformLocation(gShaderProgramObject, "u_v_matrix"), 1, GL_FALSE, vMatrix);
 	glUniformMatrix4fv(glGetUniformLocation(gShaderProgramObject, "u_p_matrix"), 1, GL_FALSE, perspectiveProjectionMatrix);
+
+	float3 wind = make_float3(0.0f, 0.0f, 0.0f);
+	if (bWind) wind = make_float3(5.0f, 0.0f, 0.0f);
+		
 
 	glBindVertexArray(vao);
 
@@ -861,7 +894,7 @@ void display(void)
 
 
 		// 3. launch the CUDA kernel
-		launchCUDAKernel(ppos1, ppos2, pvel1, pvel2, gMeshWidth, gMeshHeight, norm);
+		launchCUDAKernel(ppos1, ppos2, pvel1, pvel2, gMeshWidth, gMeshHeight, norm, wind);
 
 		// 4. unmap the resource
 		error = cudaGraphicsUnmapResources(1, &graphicsResource[0], 0);
@@ -907,7 +940,7 @@ void display(void)
 	}
 	else
 	{
-		launchCPUKernel(gMeshWidth, gMeshHeight, animationTime);
+		launchCPUKernel(gMeshWidth, gMeshHeight, vec3(wind.x, wind.y, wind.z));
 		
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE * sizeof(float), pos1, GL_DYNAMIC_DRAW);
@@ -920,17 +953,27 @@ void display(void)
 	glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 4, GL_FLOAT, GL_FALSE, 0, NULL);
 	glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
 
+	if (bOnGPU) glBindBuffer(GL_ARRAY_BUFFER, vbo_gpu[4]);
+	else glBindBuffer(GL_ARRAY_BUFFER, vbo_norm);
+	
+	glVertexAttribPointer(AMC_ATTRIBUTE_NORMAL, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+	glEnableVertexAttribArray(AMC_ATTRIBUTE_NORMAL);
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, texCloths[1]);
+
 	int lines = (gMeshWidth * (gMeshHeight - 1)) + gMeshWidth;
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_index);
 
+	// draw now!
 	// front side
-	glUniform1f(glGetUniformLocation(gShaderProgramObject, "front"), 1.0f);
-	// glCullFace(GL_BACK);
+	glUniform1f(glGetUniformLocation(gShaderProgramObject, "front"), -1.0f);
+	glCullFace(GL_BACK);
 	glDrawElements(GL_TRIANGLE_STRIP, lines * 2, GL_UNSIGNED_INT, NULL);
 	
 	// back side
 	glUniform1f(glGetUniformLocation(gShaderProgramObject, "front"), -1.0f);
-	// glCullFace(GL_FRONT);
+	glCullFace(GL_FRONT);
 	glDrawElements(GL_TRIANGLE_STRIP, lines * 2, GL_UNSIGNED_INT, NULL);
 
 	glBindVertexArray(0);
@@ -1046,30 +1089,277 @@ void uninitialize(void)
 	}
 }
 
-void launchCPUKernel(unsigned int meshWidth, unsigned int meshHeight, float time)
+void launchCPUKernel(unsigned int width, unsigned int height, vec3 wind)
 {
-	for (int i = 0; i < meshWidth; i++) 
+	vec3 make_vec3(float4);
+
+	const float m = 1.0f;
+	const float t = 0.000005 * 4;
+	const float k = 6000.0;
+	const float c = 0.95;
+	const float rest_length = 1.00;
+	const float rest_length_diag = 1.41;
+
+	float *ppos1 = &pos1[0][0][0];
+	float *ppos2 = &pos2[0][0][0];
+	float *ppos1 = &pos1[0][0][0];
+	float *ppos1 = &pos1[0][0][0];
+
+	for(int count = 0; count < 1000; count++)
 	{
-		for (int j = 0; j < meshHeight; j++)
+		for (int x = 0; x < width; x++) 
 		{
-			// for (int k = 0; k < 4; k++)
-			// {
-			// 	float u = i / (float)meshWidth;
-			// 	float v = j / (float)meshHeight;
+			for (int y = 0; y < height; y++)
+			{
+					unsigned int idx = ((y*width) + x)*4;
+					vec3 p = vec3(ppos1[idx+0], ppos1[idx+1], ppos1[idx+2]);
+					vec3 u = vec3(pvel1[idx+0], pvel1[idx+1], pvel1[idx+2]);
+					vec3 F = vec3(0.0f, -10.0f, 0.0f) * m - c * u;
+					int i = 0;
 
-			// 	u = (u * 2.0) - 1.0;
-			// 	v = (v * 2.0) - 1.0;
+					F = F + wind;
 
-			// 	float freq = 4.0f;
-			// 	float w = sinf(freq*u + time) * cosf(freq*v + time) * 0.5f;
+					if (true) // (pvel1[idx].w >= 0.0f)
+					{
+						// calculate 8 connections
+						// up
+						if (y < height-1)
+						{
+							i = idx+width;
+							vec3 q = vec3(ppos1[i+0], ppos1[i+1], ppos1[i+2]);
+							vec3 d = q - p;
+							float x = length(d);
+							F = F + -k * (rest_length - x) * normalize(d);
+						}
+						// down
+						if (y > 0)
+						{
+							i = idx-width;
+							vec3 q = vec3(ppos1[i+0], ppos1[i+1], ppos1[i+2]);
+							vec3 d = q - p;
+							float x = length(d);
+							F = F + -k * (rest_length - x) * normalize(d);
+						}
+						// left
+						if (x > 0)
+						{
+							i = idx-1;
+							vec3 q = vec3(ppos1[i+0], ppos1[i+1], ppos1[i+2]);
+							vec3 d = q - p;
+							float x = length(d);
+							F = F + -k * (rest_length - x) * normalize(d);
+						}
+						// right
+						if (x < width-1)
+						{
+							i = idx+1;
+							vec3 q = vec3(ppos1[i+0], ppos1[i+1], ppos1[i+2]);
+							vec3 d = q - p;
+							float x = length(d);
+							F = F + -k * (rest_length - x) * normalize(d);
+						}
 
-			// 	if (k == 0) pos1[i][j][k] = u;
-			// 	if (k == 1) pos1[i][j][k] = w;
-			// 	if (k == 2) pos1[i][j][k] = v;
-			// 	if (k == 3) pos1[i][j][k] = 1.0f;
-			// }
+						// lower left
+						if (x > 0 && y > 0)
+						{
+							i = idx-1-width;
+							vec3 q = vec3(ppos1[i+0], ppos1[i+1], ppos1[i+2]);
+							vec3 d = q - p;
+							float x = length(d);
+							F = F + -k * (rest_length_diag - x) * normalize(d);
+						}
+						// upper right
+						if (x < (width-1) && y < (height-1))
+						{
+							i = idx+1+width;
+							vec3 q = vec3(ppos1[i+0], ppos1[i+1], ppos1[i+2]);
+							vec3 d = q - p;
+							float x = length(d);
+							F = F + -k * (rest_length_diag - x) * normalize(d);
+						}
+						// lower right
+						if (x < (width-1) && y > 0)
+						{
+							i = idx+1-width;
+							vec3 q = vec3(ppos1[i+0], ppos1[i+1], ppos1[i+2]);
+							vec3 d = q - p;
+							float x = length(d);
+							F = F + -k * (rest_length_diag - x) * normalize(d);
+						}
+						// upper left
+						if (x > 0 && y < (height-1))
+						{
+							i = idx-1+width;
+							vec3 q = vec3(ppos1[i+0], ppos1[i+1], ppos1[i+2]);
+							vec3 d = q - p;
+							float x = length(d);
+							F = F + -k * (rest_length_diag - x) * normalize(d);
+						}
+
+					}
+					else
+					{
+						F = vec3(0.0f, 0.0f, 0.0f);
+					}
+
+					// self collision!
+					// for(int i = 0; i < width*height; i++)
+					// {
+					// 	vec3 q = make_float3(ppos1[i].x, ppos1[i].y, ppos1[i].z);
+					// 	vec3 d = q - p;
+					// 	if(length(d) > 0.2f)
+					// 		F = F - (0.8*F);
+					// }
+
+					vec3 a = F/m;
+					vec3 s = u * t + 0.5f * a * t * t;
+					vec3 v = u + a * t;
+
+					
+					// else if (vec3(p+s).y <= -4.0 && abs(vec3(p+s).x) < 5.5 && abs(vec3(p+s).z) < 5.5)
+					// {	
+					// 	s = vec3(0.0);
+					// 	v = vec3(0.0);
+					// }	
+					// else if (length(vec3(p+s)-vec3(0.0,4.0,0.0)) < 5.0)
+					// {	
+					// 	s = vec3(0.0);
+					// 	v = vec3(0.0);
+					// }	
+					
+					vec3 pos = p + s;
+					
+					if (pos[1] <= -2.0 && abs((int)pos[0]) < 10.5 && abs((int)pos[2]) < 10.5)
+					{	
+						pos = p;
+						v = vec3(0.0f, 0.0f, 0.0f);
+					}
+
+					ppos2[idx+0] = pos[0];
+					ppos2[idx+1] = pos[1];
+					ppos2[idx+2] = pos[2];
+					ppos2[idx+3] = 1.0f;
+
+					pvel2[idx+0] = v[0];
+					pvel2[idx+1] = v[1];
+					pvel2[idx+2] = v[2];
+					pvel2[idx+3] = pvel1[idx+3];
+
+					float *tmp = ppos1;
+					ppos1 = ppos2;
+					ppos2 = tmp;
+
+					tmp = pvel1;
+					pvel1 = pvel2;
+					pvel2 = tmp;
+			}
 		}
-
 	}
+
+	fprintf(gpFile, "\nCalculating normals!");
+
+	// normals
+	vec3 *norm = new vec3[gMeshTotal];
+	for (int x = 0; x < width; x++) 
+	{
+		for (int y = 0; y < height; y++)
+		{
+			unsigned int idx = (y*width) + x;
+
+			vec3 p = vec3(ppos1[idx+0], ppos1[idx+1], ppos1[idx+2]);
+			vec3 n = vec3(0.0f, 0.0f, 0.0f);
+			vec3 a, b, c;
+
+			if (y < height-1)
+			{
+				c = make_vec3(ppos1[idx+width]) - p;
+				if (x < width-1)
+				{
+					a = make_vec3(ppos1[idx+1]) - p;
+					b = make_vec3(ppos1[idx+width+1]) - p;
+					n = n + cross(a, b);
+					n = n + cross(b, c);
+				}
+				if (x > 0)
+				{
+					a = c;
+					b = make_vec3(ppos1[idx+width-1]) - p;
+					c = make_vec3(ppos1[idx-1]) - p;
+					n = n + cross(a, b);
+					n = n + cross(b, c);
+				}
+			}
+
+			if (y > 0)
+			{
+				c = make_vec3(ppos1[idx-width]) - p;
+				if (x > 0)
+				{
+					a = make_vec3(ppos1[idx-1]) - p;
+					b = make_vec3(ppos1[idx-width-1]) - p;
+					n = n + cross(a, b);
+					n = n + cross(b, c);
+				}
+				if (x < width-1)
+				{
+					a = c;
+					b = make_vec3(ppos1[idx-width+1]) - p;
+					c = make_vec3(ppos1[idx+1]) - p;
+					n = n + cross(a, b);
+					n = n + cross(b, c);
+				}
+			}
+
+			norm[idx] = n;
+		}
+	}
+	
+	glBindBuffer(GL_ARRAY_BUFFER, vbo_norm);
+	glBufferData(GL_ARRAY_BUFFER, gMeshTotal*3*sizeof(float), norm, GL_DYNAMIC_DRAW);
+
+	delete []norm;
 }
 
+// Convert image resource to image data
+BOOL loadTexture(GLuint* texture, TCHAR imageResourceID[])
+{
+	// variables
+	HBITMAP hBitmap = NULL;
+	BITMAP bmp;
+	BOOL bStatus = false;
+
+	// data
+	hBitmap = (HBITMAP)LoadImage(GetModuleHandle(NULL),
+		imageResourceID,
+		IMAGE_BITMAP,
+		0, 0,
+		LR_CREATEDIBSECTION
+	);
+
+	if (hBitmap)
+	{
+		bStatus = TRUE;
+		GetObject(hBitmap, sizeof(BITMAP), &bmp);
+
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+		glGenTextures(1, texture);
+		glBindTexture(GL_TEXTURE_2D, *texture);
+
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, bmp.bmWidth, bmp.bmHeight, 0, GL_BGR, GL_UNSIGNED_BYTE, bmp.bmBits);
+		glGenerateMipmap(GL_TEXTURE_2D);
+
+		glBindTexture(GL_TEXTURE_2D, 0);
+
+		DeleteObject(hBitmap);
+	}
+
+	return bStatus;
+}
+
+vec3 make_vec3(float4 a)
+{
+	return vec3(a.x, a.y, a.z);
+}

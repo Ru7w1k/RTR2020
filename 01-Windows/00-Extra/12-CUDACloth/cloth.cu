@@ -56,7 +56,7 @@ __device__ float3 make_float3(const float4 &b)
 
 
 // cloth update
-__global__ void cloth_kernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *vel2, unsigned int width, unsigned int height)
+__global__ void cloth_kernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *vel2, unsigned int width, unsigned int height, float3 wind)
 {
 	unsigned int x = (blockIdx.x*blockDim.x) + threadIdx.x;
 	unsigned int y = (blockIdx.y*blockDim.y) + threadIdx.y;
@@ -76,6 +76,8 @@ __global__ void cloth_kernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *v
 	float3 u = make_float3(vel1[idx].x, vel1[idx].y, vel1[idx].z);
 	float3 F = make_float3(0.0f, -10.0f, 0.0f) * m - c * u;
 	int i = 0;
+
+	F = F + wind;
 
 	if (true) // (vel1[idx].w >= 0.0f)
 	{
@@ -161,13 +163,8 @@ __global__ void cloth_kernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *v
 	}
 
 	// self collision!
-	// for(int i = 0; i < width*height; i++)
-	// {
-	// 	float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
-	// 	float3 d = q - p;
-	// 	if(length(d) > 0.2f)
-	// 		F = F - (0.5*F);
-	// }
+	//int nbrs[] = {idx+width,idx-width,idx-1,idx+1,idx-1-width,idx+1+width,idx+1-width,idx-1+width};
+	
 
 	float3 a = F/m;
 	float3 s = u * t + 0.5f * a * t * t;
@@ -179,22 +176,34 @@ __global__ void cloth_kernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *v
 	// 	s = vec3(0.0);
 	// 	v = vec3(0.0);
 	// }	
-	// else if (length(vec3(p+s)-vec3(0.0,4.0,0.0)) < 5.0)
-	// {	
-	// 	s = vec3(0.0);
-	// 	v = vec3(0.0);
-	// }	
+	
 	
 	float3 pos = p + s;
-	
-	if (pos.y <= -1.0 && abs(pos.x) < 10.5 && abs(pos.z) < 10.5)
+
+	// float force = length(F);
+	// for(int i = 0; i < width*height && i!=idx; i++)
+	// {
+	// 	float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+	// 	float3 d = q - pos;
+	// 	if(length(d) < 0.4)
+	// 		v = v-force*normalize(d);
+		
+	// }
+
+	if (pos.y <= -2.0 && abs(pos.x) < 10.5 && abs(pos.z) < 10.5)
 	{	
 		pos = p;
+		v = make_float3(0.0f, 0.0f, 0.0f);
+	}
+	else if (length(pos-make_float3(0.0f,4.0f,0.0f)) < 5.0)
+	{	
+		s = make_float3(0.0f, 0.0f, 0.0f);
 		v = make_float3(0.0f, 0.0f, 0.0f);
 	}
 
 	pos2[idx] = make_float4(pos.x, pos.y, pos.z, 1.0f);
 	vel2[idx] = make_float4(v.x, v.y, v.z, vel1[idx].w);
+
 	return;
 }
 
@@ -254,16 +263,16 @@ __global__ void cloth_normals(float4 *pos, float3 *norm, unsigned int width, uns
 	norm[idx] = n;
 }
 
-void launchCUDAKernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *vel2, unsigned int meshWidth, unsigned int meshHeight, float3 *norm)
+void launchCUDAKernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *vel2, unsigned int meshWidth, unsigned int meshHeight, float3 *norm, float3 wind)
 {
-	dim3 block(8, 8, 1);
+	dim3 block(16, 16, 1);
 	dim3 grid(meshWidth / block.x, meshHeight / block.y, 1);
-	
+
 	for(int i = 0; i < 500; i++)
 	{
-		cloth_kernel<<<grid, block>>>(pos1, pos2, vel1, vel2, meshWidth, meshHeight);
+		cloth_kernel<<<grid, block>>>(pos1, pos2, vel1, vel2, meshWidth, meshHeight, wind);
 		//cudaDeviceSynchronize();
-		cloth_kernel<<<grid, block>>>(pos2, pos1, vel2, vel1, meshWidth, meshHeight);
+		cloth_kernel<<<grid, block>>>(pos2, pos1, vel2, vel1, meshWidth, meshHeight, wind);
 		//cudaDeviceSynchronize();
 
 	}
