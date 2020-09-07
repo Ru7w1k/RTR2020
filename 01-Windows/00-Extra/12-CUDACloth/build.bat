@@ -1,5 +1,7 @@
 cls
 
+del cloth.obj main.obj main.exe
+
 nvcc.exe -c -o cloth.obj cloth.cu
 
 cl.exe /c /EHsc /I"C:\glew\include" /I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.1\include" main.cpp

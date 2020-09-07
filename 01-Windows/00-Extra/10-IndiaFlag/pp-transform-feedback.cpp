@@ -44,8 +44,8 @@ enum BUFFER_TYPE_t
 
 enum
 {
-	POINTS_X          = 25,
-	POINTS_Y          = 25,
+	POINTS_X          = 50,
+	POINTS_Y          = 50,
 	POINTS_TOTAL      = POINTS_X * POINTS_Y,
 	CONNECTIONS_TOTAL = (POINTS_X - 1) * POINTS_Y + (POINTS_Y - 1) * POINTS_X
 };
@@ -460,8 +460,8 @@ int initialize(void)
 		"uniform float radius = 0.2;" \
 
 		// width and height of position texture thing
-		"uniform int xMax = 25;" \
-		"uniform int yMax = 25;" \
+		"uniform int xMax = 50;" \
+		"uniform int yMax = 50;" \
 
 		"void main()" \
 		"{" \
@@ -506,15 +506,15 @@ int initialize(void)
 		"	{" \
 		"		for (int y = 0; y < yMax; y++)" \
 		"		{" \
-		"			vec3 q = texelFetch(tex_position, (x*xMax) + y).xyz;" \
+		"			vec3 q = texelFetch(tex_position, (y*xMax) + x).xyz;" \
 		"           float dist = length(p-q); " \
-		"			if(dist > 0.0 && dist < 0.1)" \
+		"			if(dist > 0.0 && dist < 0.4)" \
 		"			{" \
 		"				u *= -normalize(vec3(p-q));" \
 		"			}" \
 		"		}" \
 		"	}" \
-
+		
 			// acceleration due to force
 		"	vec3 a = F / m;" \
 
