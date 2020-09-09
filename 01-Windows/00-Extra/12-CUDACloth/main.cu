@@ -31,10 +31,16 @@ enum {
 	AMC_ATTRIBUTE_TEXCOORD0
 };
 
+#define CLOTH_CURTAIN 	1
+#define CLOTH_TABLE 	2
+#define CLOTH_SPHERES 	3
+
+
 // Global Variables
 const int gMeshWidth = 6 * 8;
 const int gMeshHeight = 6 * 8;
 const int gMeshTotal = gMeshWidth * gMeshHeight;
+int gState = CLOTH_CURTAIN;
 
 #define MY_ARRAY_SIZE gMeshWidth*gMeshHeight*4
 
@@ -68,6 +74,7 @@ cudaError_t error;
 bool bAnimation = true;
 GLuint mvpUniform;
 mat4 perspectiveProjectionMatrix;
+float cAngle = 0.0f;
 
 
 /* helper functions for float3 */
@@ -177,7 +184,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 	// create window
 	hwnd = CreateWindowEx(WS_EX_APPWINDOW,
 		szClassName,
-		TEXT("CUDA OpenGL Interoperability"),
+		TEXT("Cloth Rendering"),
 		WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE,
 		100,
 		100,
@@ -251,7 +258,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 {
 	// function declarations
 	void resize(int, int);
-	void uninitialize();
+	void uninitialize(void);
+	void reset(void);
 
 	void ToggleFullScreen(void);
 
@@ -303,16 +311,35 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 		case 'c':
 			if (bOnGPU)
 			{
-				glBindVertexArray(vao);
+				// copy data from vertex buffer of GPU to vertex buffer of CPU
 				glBindBuffer(GL_ARRAY_BUFFER, vbo_gpu[0]);
-
 				vec4* p = (vec4*)glMapBuffer(GL_ARRAY_BUFFER, GL_READ_ONLY);
 				memcpy_s(pos, gMeshTotal * sizeof(float4), p, gMeshTotal * sizeof(float4));
 				glUnmapBuffer(GL_ARRAY_BUFFER);
 				glBindBuffer(GL_ARRAY_BUFFER, 0);
-				glBindVertexArray(0);
+
 				bOnGPU = false;
 			}
+			break;
+
+		case 'r':
+		case 'R':
+			reset();
+			break;
+
+		case '1':
+			gState = CLOTH_CURTAIN;
+			reset();
+			break;
+
+		case '2':
+			gState = CLOTH_SPHERES;
+			reset();
+			break;
+
+		case '3':
+			gState = CLOTH_TABLE;
+			reset();
 			break;
 
 		case 'A':
@@ -335,6 +362,16 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 
 		case 0x46:
 			ToggleFullScreen();
+			break;
+
+		case VK_LEFT:
+			if(cAngle > -2.0f*M_PI)
+				cAngle -= 0.01f;
+			break;
+
+		case VK_RIGHT:
+			if(cAngle < 2.0f*M_PI)
+				cAngle += 0.01f;
 			break;
 		}
 		break;
@@ -403,6 +440,7 @@ int initialize(void)
 	void resize(int, int);
 	void uninitialize(void);
 	BOOL loadTexture(GLuint*, TCHAR[]);
+	void GetPresetData(vec4*);
 
 
 	// variable declarations
@@ -505,7 +543,7 @@ int initialize(void)
 		"uniform mat4 u_m_matrix;" \
 		"uniform mat4 u_v_matrix;" \
 		"uniform mat4 u_p_matrix;" \
-		"uniform vec4 u_light_position = vec4(0.0f, 5.0f, 0.0f, 1.0f);" \
+		"uniform vec4 u_light_position = vec4(0.0f, 0.0f, 5.0f, 1.0f);" \
 
 		"out vec3 tnorm;" \
 		"out vec3 light_direction;" \
@@ -677,11 +715,12 @@ int initialize(void)
 	int i, j;
 
 	vec4 *initial_positions = new vec4[gMeshTotal];
-	vec4 *initial_velocities = new vec4[gMeshTotal];
 	vec3 *initial_normals = new vec3[gMeshTotal];
 	vec2 *initial_texcoords = new vec2[gMeshTotal];
 
 	int n = 0;
+
+	GetPresetData(initial_positions);
 
 	for (j = 0; j < gMeshHeight; j++)
 	{
@@ -690,12 +729,6 @@ int initialize(void)
 		{
 			float fi = (float)i / (float)gMeshWidth;
 
-			initial_positions[n] = vec4((fi - 0.5f) * (float)gMeshWidth,
-				10.0f,
-				(fj - 0.5f) * (float)gMeshHeight,
-				1.0);
-
-			initial_velocities[n] = vec4(0.0f);
 			initial_normals[n] = vec3(0.0f);
 
 			// texture coords
@@ -718,7 +751,7 @@ int initialize(void)
 
 	glGenBuffers(1, &vbo_norm);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo_norm);
-	glBufferData(GL_ARRAY_BUFFER, gMeshTotal * 3 * sizeof(float), initial_velocities, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, gMeshTotal * 3 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
 
 	// vertex positions
 	glGenBuffers(6, vbo_gpu);
@@ -743,7 +776,7 @@ int initialize(void)
 	for (int i = 2; i < 4; i++)
 	{
 		glBindBuffer(GL_ARRAY_BUFFER, vbo_gpu[i]);
-		glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE * sizeof(float), initial_velocities, GL_DYNAMIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE * sizeof(float), vel, GL_DYNAMIC_DRAW);
 
 		// register our vbo with cuda graphics resource
 		error = cudaGraphicsGLRegisterBuffer(&graphicsResource[i], vbo_gpu[i], cudaGraphicsMapFlagsWriteDiscard);
@@ -800,7 +833,6 @@ int initialize(void)
 	glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
 
 	delete[]initial_positions;
-	delete[]initial_velocities;
 	delete[]initial_normals;
 	delete[]initial_texcoords;
 
@@ -820,6 +852,9 @@ int initialize(void)
 	// enable blend
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	// face culling
+	glEnable(GL_CULL_FACE);
 
 	// clear the screen by OpenGL
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -862,13 +897,11 @@ void display(void)
 	glUseProgram(gShaderProgramObject);
 
 	mat4 mMatrix = mat4::identity();
-	//mMatrix *= rotate(0.0f, 100.0f*sinf(t), 0.0f);
+	mMatrix *= rotate(0.0f, 100.0f*sinf(cAngle), 0.0f);
 
 	mat4 vMatrix = mat4::identity();
-	static float angle = 0.0f;
-	angle += 0.005f;
 	vMatrix *= lookat(
-		vec3(60.0f*sinf(angle), 0.0f, 60.0f*cosf(angle)),
+		vec3(0.0f, 0.0f, 80.0f),
 		vec3(0.0f, 0.0f, 0.0f),
 		vec3(0.0f, 1.0f, 0.0f));
 
@@ -877,8 +910,7 @@ void display(void)
 	glUniformMatrix4fv(glGetUniformLocation(gShaderProgramObject, "u_p_matrix"), 1, GL_FALSE, perspectiveProjectionMatrix);
 
 	float3 wind = make_float3(0.0f, 0.0f, 0.0f);
-	if (bWind) wind = make_float3(5.0f, 0.0f, 0.0f);
-
+	if (bWind) wind = make_float3(0.0f, 0.0f, 8.0f);
 
 	glBindVertexArray(vao);
 
@@ -1049,15 +1081,19 @@ void display(void)
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_index);
 
 	// draw now!
+	
+	// back side
+	glUniform1f(glGetUniformLocation(gShaderProgramObject, "front"), 1.0f);
+	glCullFace(GL_FRONT);
+	glDrawElements(GL_TRIANGLE_STRIP, lines * 2, GL_UNSIGNED_INT, NULL);
+
 	// front side
 	glUniform1f(glGetUniformLocation(gShaderProgramObject, "front"), -1.0f);
 	glCullFace(GL_BACK);
 	glDrawElements(GL_TRIANGLE_STRIP, lines * 2, GL_UNSIGNED_INT, NULL);
 
-	// back side
-	glUniform1f(glGetUniformLocation(gShaderProgramObject, "front"), -1.0f);
-	glCullFace(GL_FRONT);
-	glDrawElements(GL_TRIANGLE_STRIP, lines * 2, GL_UNSIGNED_INT, NULL);
+
+
 
 	glBindVertexArray(0);
 
@@ -1180,7 +1216,7 @@ void launchCPUKernel(unsigned int width, unsigned int height, float3 wind)
 	const float m = 1.0f;
 	const float t = 0.000005 * 4;
 	const float k = 6000.0;
-	const float c = 0.95;
+	const float c = 0.55;
 	const float rest_length = 1.00;
 	const float rest_length_diag = 1.41;
 
@@ -1198,21 +1234,21 @@ void launchCPUKernel(unsigned int width, unsigned int height, float3 wind)
 			for (unsigned int y = 0; y < height; y++)
 			{
 				unsigned int idx = (y*width) + x;
-				float3 p = make_float3(pos1[idx].x, pos1[idx].y, pos1[idx].z);
-				float3 u = make_float3(vel1[idx].x, vel1[idx].y, vel1[idx].z);
+				float3 p = make_float3(ppos1[idx].x, ppos1[idx].y, ppos1[idx].z);
+				float3 u = make_float3(pvel1[idx].x, pvel1[idx].y, pvel1[idx].z);
 				float3 F = make_float3(0.0f, -10.0f, 0.0f) * m - c * u;
 				int i = 0;
 
 				F = F + wind;
 
-				if (true) // (vel1[idx].w >= 0.0f)
+				if (pvel1[idx].w >= 0.0f)
 				{
 					// calculate 8 connections
 					// up
 					if (y < height - 1)
 					{
 						i = idx + width;
-						float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+						float3 q = make_float3(ppos1[i].x, ppos1[i].y, ppos1[i].z);
 						float3 d = q - p;
 						float x = length(d);
 						F = F + -k * (rest_length - x) * normalize(d);
@@ -1221,7 +1257,7 @@ void launchCPUKernel(unsigned int width, unsigned int height, float3 wind)
 					if (y > 0)
 					{
 						i = idx - width;
-						float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+						float3 q = make_float3(ppos1[i].x, ppos1[i].y, ppos1[i].z);
 						float3 d = q - p;
 						float x = length(d);
 						F = F + -k * (rest_length - x) * normalize(d);
@@ -1230,7 +1266,7 @@ void launchCPUKernel(unsigned int width, unsigned int height, float3 wind)
 					if (x > 0)
 					{
 						i = idx - 1;
-						float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+						float3 q = make_float3(ppos1[i].x, ppos1[i].y, ppos1[i].z);
 						float3 d = q - p;
 						float x = length(d);
 						F = F + -k * (rest_length - x) * normalize(d);
@@ -1239,7 +1275,7 @@ void launchCPUKernel(unsigned int width, unsigned int height, float3 wind)
 					if (x < width - 1)
 					{
 						i = idx + 1;
-						float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+						float3 q = make_float3(ppos1[i].x, ppos1[i].y, ppos1[i].z);
 						float3 d = q - p;
 						float x = length(d);
 						F = F + -k * (rest_length - x) * normalize(d);
@@ -1249,7 +1285,7 @@ void launchCPUKernel(unsigned int width, unsigned int height, float3 wind)
 					if (x > 0 && y > 0)
 					{
 						i = idx - 1 - width;
-						float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+						float3 q = make_float3(ppos1[i].x, ppos1[i].y, ppos1[i].z);
 						float3 d = q - p;
 						float x = length(d);
 						F = F + -k * (rest_length_diag - x) * normalize(d);
@@ -1258,7 +1294,7 @@ void launchCPUKernel(unsigned int width, unsigned int height, float3 wind)
 					if (x < (width - 1) && y < (height - 1))
 					{
 						i = idx + 1 + width;
-						float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+						float3 q = make_float3(ppos1[i].x, ppos1[i].y, ppos1[i].z);
 						float3 d = q - p;
 						float x = length(d);
 						F = F + -k * (rest_length_diag - x) * normalize(d);
@@ -1267,7 +1303,7 @@ void launchCPUKernel(unsigned int width, unsigned int height, float3 wind)
 					if (x < (width - 1) && y > 0)
 					{
 						i = idx + 1 - width;
-						float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+						float3 q = make_float3(ppos1[i].x, ppos1[i].y, ppos1[i].z);
 						float3 d = q - p;
 						float x = length(d);
 						F = F + -k * (rest_length_diag - x) * normalize(d);
@@ -1276,7 +1312,7 @@ void launchCPUKernel(unsigned int width, unsigned int height, float3 wind)
 					if (x > 0 && y < (height - 1))
 					{
 						i = idx - 1 + width;
-						float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+						float3 q = make_float3(ppos1[i].x, ppos1[i].y, ppos1[i].z);
 						float3 d = q - p;
 						float x = length(d);
 						F = F + -k * (rest_length_diag - x) * normalize(d);
@@ -1288,84 +1324,57 @@ void launchCPUKernel(unsigned int width, unsigned int height, float3 wind)
 					F = make_float3(0.0f, 0.0f, 0.0f);
 				}
 
-				// self collision!
-				//int nbrs[] = {idx+width,idx-width,idx-1,idx+1,idx-1-width,idx+1+width,idx+1-width,idx-1+width};
-
-
 				float3 a = F / m;
 				float3 s = u * t + 0.5f * a * t * t;
 				float3 v = u + a * t;
 
-
-				// else if (vec3(p+s).y <= -4.0 && abs(vec3(p+s).x) < 5.5 && abs(vec3(p+s).z) < 5.5)
-				// {	
-				// 	s = vec3(0.0);
-				// 	v = vec3(0.0);
-				// }	
-
-
-				// float force = length(F);
-				// for(int i = 0; i < width*height && i!=idx; i++)
-				// {
-				// 	float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
-				// 	float3 d = q - pos;
-				// 	if(length(d) < 0.4)
-				// 		v = v-force*normalize(d);
-
-				// }
-
-				// if (pos.y <= -2.0 && abs(pos.x) < 10.5 && abs(pos.z) < 10.5)
-				// {	
-				// 	pos = p;
-				// 	v = make_float3(0.0f, 0.0f, 0.0f);
-				// }
-				// else 
-
-
-
-				float3 op = p - make_float3(-15.0f, -4.0f, -15.0f);
-				float lop = length(op);
-				if (lop < 8.0)
+				// spheres
+				if (gState == CLOTH_SPHERES)
 				{
-					s.y = 0.0f;
-					v.y = 0.0f;
+					float3 op = p - make_float3(-10.0f, -4.0f, -10.0f);
+					float lop = length(op);
+					if (lop < 5.0)
+					{
+						s.y = 0.0f;
+						v.y = 0.0f;
+					}
+
+					op = p - make_float3(10.0f, -4.0f, -10.0f);
+					lop = length(op);
+					if (lop < 5.0)
+					{
+						s.y = 0.0f;
+						v.y = 0.0f;
+					}
+
+					op = p - make_float3(-10.0f, -4.0f, 10.0f);
+					lop = length(op);
+					if (lop < 5.0)
+					{
+						s.y = 0.0f;
+						v.y = 0.0f;
+					}
+
+					op = p - make_float3(10.0f, -4.0f, 10.0f);
+					lop = length(op);
+					if (lop < 5.0)
+					{
+						s.y = 0.0f;
+						v.y = 0.0f;
+					}
 				}
 
-				op = p - make_float3(15.0f, -4.0f, -15.0f);
-				lop = length(op);
-				if (lop < 8.0)
+				// rectangle
+				if (gState == CLOTH_TABLE)
 				{
-					s.y = 0.0f;
-					v.y = 0.0f;
+					if (p.y <= -4.0 && abs(p.x) < 15.5 && abs(p.z) < 15.5)
+					{
+						s.y = 0.0f;
+						v.y = 0.0f;
+					}
 				}
-
-				op = p - make_float3(-15.0f, -4.0f, 15.0f);
-				lop = length(op);
-				if (lop < 8.0)
-				{
-					s.y = 0.0f;
-					v.y = 0.0f;
-				}
-
-				op = p - make_float3(15.0f, -4.0f, 15.0f);
-				lop = length(op);
-				if (lop < 8.0)
-				{
-					s.y = 0.0f;
-					v.y = 0.0f;
-				}
-
-
-				// if (p.y <= -4.0 && abs(p.x) < 15.5 && abs(p.z) < 15.5)
-				// {
-				// 	s.y = 0.0f;
-				// 	v.y = 0.0f;
-				// }
-
-
 
 				float3 pos = p + s;
-
 				ppos2[idx] = make_float4(pos.x, pos.y, pos.z, 1.0f);
 				pvel2[idx] = make_float4(v.x, v.y, v.z, vel1[idx].w);
 			}
@@ -1477,7 +1486,7 @@ BOOL loadTexture(GLuint* texture, TCHAR imageResourceID[])
 
 
 // cloth update
-__global__ void cloth_kernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *vel2, unsigned int width, unsigned int height, float3 wind, float xOffset)
+__global__ void cloth_kernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *vel2, unsigned int width, unsigned int height, float3 wind, int gState)
 {
 	unsigned int x = (blockIdx.x*blockDim.x) + threadIdx.x;
 	unsigned int y = (blockIdx.y*blockDim.y) + threadIdx.y;
@@ -1489,7 +1498,7 @@ __global__ void cloth_kernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *v
 	const float m = 1.0f;
 	const float t = 0.000005 * 4;
 	const float k = 6000.0;
-	const float c = 0.95;
+	const float c = 0.55;
 	const float rest_length = 1.00;
 	const float rest_length_diag = 1.41;
 
@@ -1500,7 +1509,7 @@ __global__ void cloth_kernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *v
 
 	F = F + wind;
 
-	if (true) // (vel1[idx].w >= 0.0f)
+	if (vel1[idx].w >= 0.0f) 
 	{
 		// calculate 8 connections
 		// up
@@ -1583,79 +1592,55 @@ __global__ void cloth_kernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *v
 		F = make_float3(0.0f, 0.0f, 0.0f);
 	}
 
-	// self collision!
-	//int nbrs[] = {idx+width,idx-width,idx-1,idx+1,idx-1-width,idx+1+width,idx+1-width,idx-1+width};
-
-
 	float3 a = F / m;
 	float3 s = u * t + 0.5f * a * t * t;
 	float3 v = u + a * t;
 
-
-	// else if (vec3(p+s).y <= -4.0 && abs(vec3(p+s).x) < 5.5 && abs(vec3(p+s).z) < 5.5)
-	// {	
-	// 	s = vec3(0.0);
-	// 	v = vec3(0.0);
-	// }	
-
-
-	// float force = length(F);
-	// for(int i = 0; i < width*height && i!=idx; i++)
-	// {
-	// 	float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
-	// 	float3 d = q - pos;
-	// 	if(length(d) < 0.4)
-	// 		v = v-force*normalize(d);
-
-	// }
-
-	// if (pos.y <= -2.0 && abs(pos.x) < 10.5 && abs(pos.z) < 10.5)
-	// {	
-	// 	pos = p;
-	// 	v = make_float3(0.0f, 0.0f, 0.0f);
-	// }
-	// else 
-
-
-
-	float3 op = p - make_float3(-15.0f, -4.0f, -15.0f);
-	float lop = length(op);
-	if (lop < 8.0)
+	// spheres
+	if (gState == CLOTH_SPHERES)
 	{
-		s.y = 0.0f;
-		v.y = 0.0f;
+		float3 op = p - make_float3(-20.0f, -4.0f, -20.0f);
+		float lop = length(op);
+		if (lop < 5.0)
+		{
+			s.y = 0.0f;
+			v.y = 0.0f;
+		}
+
+		op = p - make_float3(20.0f, -4.0f, -20.0f);
+		lop = length(op);
+		if (lop < 5.0)
+		{
+			s.y = 0.0f;
+			v.y = 0.0f;
+		}
+
+		op = p - make_float3(-20.0f, -4.0f, 20.0f);
+		lop = length(op);
+		if (lop < 5.0)
+		{
+			s.y = 0.0f;
+			v.y = 0.0f;
+		}
+
+		op = p - make_float3(20.0f, -4.0f, 20.0f);
+		lop = length(op);
+		if (lop < 5.0)
+		{
+			s.y = 0.0f;
+			v.y = 0.0f;
+		}
 	}
 
-	op = p - make_float3(15.0f, -4.0f, -15.0f);
-	lop = length(op);
-	if (lop < 8.0)
+	// rectangle
+	if (gState == CLOTH_TABLE)
 	{
-		s.y = 0.0f;
-		v.y = 0.0f;
+		if (p.y <= -4.0 && abs(p.x) < 15.5 && abs(p.z) < 15.5)
+		{
+			s.y = 0.0f;
+			v.y = 0.0f;
+		}
 	}
-
-	op = p - make_float3(-15.0f, -4.0f, 15.0f);
-	lop = length(op);
-	if (lop < 8.0)
-	{
-		s.y = 0.0f;
-		v.y = 0.0f;
-	}
-
-	op = p - make_float3(15.0f, -4.0f, 15.0f);
-	lop = length(op);
-	if (lop < 8.0)
-	{
-		s.y = 0.0f;
-		v.y = 0.0f;
-	}
-
-
-	// if (p.y <= -4.0 && abs(p.x) < 15.5 && abs(p.z) < 15.5)
-	// {
-	// 	s.y = 0.0f;
-	// 	v.y = 0.0f;
-	// }
 
 
 
@@ -1730,9 +1715,9 @@ void launchCUDAKernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *vel2, un
 
 	for (int i = 0; i < 500; i++)
 	{
-		cloth_kernel << <grid, block >> > (pos1, pos2, vel1, vel2, meshWidth, meshHeight, wind, xOffset);
+		cloth_kernel << <grid, block >> > (pos1, pos2, vel1, vel2, meshWidth, meshHeight, wind, gState);
 		//cudaDeviceSynchronize();
-		cloth_kernel << <grid, block >> > (pos2, pos1, vel2, vel1, meshWidth, meshHeight, wind, xOffset);
+		cloth_kernel << <grid, block >> > (pos2, pos1, vel2, vel1, meshWidth, meshHeight, wind, gState);
 		//cudaDeviceSynchronize();
 
 	}
@@ -1740,4 +1725,64 @@ void launchCUDAKernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *vel2, un
 	cloth_normals << <grid, block >> > (pos1, norm, meshWidth, meshHeight);
 }
 
+void reset()
+{
+	void GetPresetData(vec4*);
 
+	vec4 *pos = new vec4[gMeshTotal];
+	
+	GetPresetData(pos);
+
+	//// CPU related buffers /////////
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE * sizeof(float), pos, GL_DYNAMIC_DRAW);
+
+	//// GPU related buffers /////////
+	glBindBuffer(GL_ARRAY_BUFFER, vbo_gpu[0]);
+	glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE * sizeof(float), pos, GL_DYNAMIC_DRAW);
+
+	glBindBuffer(GL_ARRAY_BUFFER, vbo_gpu[2]);
+	glBufferData(GL_ARRAY_BUFFER, gMeshTotal * 4 * sizeof(float), vel, GL_DYNAMIC_DRAW);
+}
+
+void GetPresetData(vec4 *pos)
+{
+	int i, j;
+	int n = 0;
+
+	for (j = 0; j < gMeshHeight; j++)
+	{
+		float fj = (float)j / (float)gMeshHeight;
+		for (i = 0; i < gMeshWidth; i++)
+		{
+			float fi = (float)i / (float)gMeshWidth;
+
+			
+			vel[n] = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+			
+			switch(gState)
+			{
+				case CLOTH_CURTAIN:
+					pos[n] = vec4((fi - 0.5f) * (float)gMeshWidth,
+						20.0f,
+						(fj - 0.5f) * (float)gMeshHeight,
+						1.0);
+
+					// stable points
+					if (j == (gMeshHeight - 1) && (i % 6 == 0 || i == 47))
+						vel[n].w = -1.0f;
+				break;
+				
+				case CLOTH_SPHERES:
+				case CLOTH_TABLE:
+					pos[n] = vec4((fi - 0.5f) * (float)gMeshWidth,
+						20.0f,
+						(fj - 0.5f) * (float)gMeshHeight,
+						1.0);
+				break;
+			}
+
+			n++;
+		}
+	}
+}
