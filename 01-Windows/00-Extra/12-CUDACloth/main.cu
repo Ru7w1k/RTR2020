@@ -26,17 +26,22 @@ using namespace vmath;
 
 enum {
 	AMC_ATTRIBUTE_POSITION = 0,
-	AMC_ATTRIBUTE_COLOR, 
+	AMC_ATTRIBUTE_COLOR,
 	AMC_ATTRIBUTE_NORMAL,
 	AMC_ATTRIBUTE_TEXCOORD0
 };
 
 // Global Variables
-const int gMeshWidth = 6*8;
-const int gMeshHeight = 6*8;
-const int gMeshTotal = gMeshWidth*gMeshHeight;
+const int gMeshWidth = 6 * 8;
+const int gMeshHeight = 6 * 8;
+const int gMeshTotal = gMeshWidth * gMeshHeight;
 
 #define MY_ARRAY_SIZE gMeshWidth*gMeshHeight*4
+
+float4 pos[gMeshTotal] = { 0 };
+float4 pos1[gMeshTotal] = { 0 };
+float4 vel[gMeshTotal] = { 0 };
+float4 vel1[gMeshTotal] = { 0 };
 
 FILE  *gpFile = NULL;
 bool  gbActiveWindow = false;
@@ -49,12 +54,7 @@ DWORD dwStyle;
 WINDOWPLACEMENT wpPrev = { sizeof(WINDOWPLACEMENT) };
 
 GLuint gShaderProgramObject;
-
-float pos1[gMeshWidth][gMeshHeight][4];
-float pos2[gMeshWidth][gMeshHeight][4];
-float vel1[gMeshWidth][gMeshHeight][4];
-float vel2[gMeshWidth][gMeshHeight][4];
-struct cudaGraphicsResource *graphicsResource[5] = {0};
+struct cudaGraphicsResource *graphicsResource[5] = { 0 };
 GLuint vao;
 GLuint vbo;
 GLuint vbo_norm;
@@ -68,6 +68,64 @@ cudaError_t error;
 bool bAnimation = true;
 GLuint mvpUniform;
 mat4 perspectiveProjectionMatrix;
+
+
+/* helper functions for float3 */
+__host__ __device__ float3 operator+(const float3 &a, const float3 &b)
+{
+	return make_float3(a.x + b.x, a.y + b.y, a.z + b.z);
+}
+
+__host__ __device__ float3 operator-(const float3 &a, const float3 &b)
+{
+	return make_float3(a.x - b.x, a.y - b.y, a.z - b.z);
+}
+
+__host__ __device__ float3 operator*(const float3 &a, float b)
+{
+	return make_float3(a.x*b, a.y*b, a.z*b);
+}
+
+__host__ __device__ float3 operator*(float b, const float3 &a)
+{
+	return make_float3(a.x*b, a.y*b, a.z*b);
+}
+
+__host__ __device__ float3 operator/(const float3 &a, float b)
+{
+	return make_float3(a.x / b, a.y / b, a.z / b);
+}
+
+__host__ __device__ float3 operator/(float b, const float3 &a)
+{
+	return make_float3(a.x / b, a.y / b, a.z / b);
+}
+
+__host__ __device__ float length(const float3 &a)
+{
+	return sqrt(a.x*a.x + a.y*a.y + a.z*a.z);
+}
+
+__host__ __device__ float3 normalize(const float3 &a)
+{
+	return a / length(a);
+}
+
+__host__ __device__ float3 cross(const float3 &a, const float3 &b)
+{
+	return make_float3(
+		(a.y*b.z - a.z*b.y),
+		(-(a.x*b.z - a.z*b.x)),
+		(a.x*b.y - a.y*b.x)
+	);
+}
+
+__host__ __device__ float3 make_float3(const float4 &b)
+{
+	return make_float3(b.x, b.y, b.z);
+}
+
+
 
 // Global function declaration
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -222,7 +280,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 		{
 		case 'G':
 		case 'g':
-			bOnGPU = true;
+			if (!bOnGPU)
+			{
+				// copy data from vertex buffer of CPU to vertex buffer of GPU
+				glBindBuffer(GL_COPY_READ_BUFFER, vbo);
+				glBindBuffer(GL_COPY_WRITE_BUFFER, vbo_gpu[0]);
+
+				glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, gMeshTotal * sizeof(float));
+
+				glBindBuffer(GL_COPY_READ_BUFFER, 0);
+				glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
+				bOnGPU = true;
+			}
 			break;
 
 		case 'W':
@@ -232,7 +301,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 
 		case 'C':
 		case 'c':
-			bOnGPU = false;
+			if (bOnGPU)
+			{
+				glBindVertexArray(vao);
+				glBindBuffer(GL_ARRAY_BUFFER, vbo_gpu[0]);
+
+				vec4* p = (vec4*)glMapBuffer(GL_ARRAY_BUFFER, GL_READ_ONLY);
+				memcpy_s(pos, gMeshTotal * sizeof(float4), p, gMeshTotal * sizeof(float4));
+				glUnmapBuffer(GL_ARRAY_BUFFER);
+				glBindBuffer(GL_ARRAY_BUFFER, 0);
+				glBindVertexArray(0);
+				bOnGPU = false;
+			}
 			break;
 
 		case 'A':
@@ -483,7 +563,7 @@ int initialize(void)
 	const GLchar *fragmentShaderSourceCode = (GLchar *)
 		"#version 450 core" \
 		"\n" \
-		
+
 		"in vec3 tnorm;" \
 		"in vec3 light_direction;" \
 		"in vec3 viewer_vector;" \
@@ -498,7 +578,7 @@ int initialize(void)
 		"uniform float u_shininess = 25.0;" \
 
 		"uniform sampler2D u_sampler;" \
-		
+
 		"out vec4 FragColor;" \
 
 		"void main (void)" \
@@ -508,15 +588,14 @@ int initialize(void)
 		"   vec3 nviewer_vector = normalize(viewer_vector);" \
 		"   vec3 reflection_vector = reflect(-nlight_direction, ntnorm);" \
 		"   float tn_dot_ldir = max(dot(ntnorm, nlight_direction), 0.0);" \
-		
+
 		"   vec3 ambient  = u_la * u_ka;" \
 		"   vec3 diffuse  = u_ld * u_kd * tn_dot_ldir;" \
 		"   vec3 specular = u_ls * u_ks * pow(max(dot(reflection_vector, nviewer_vector), 0.0), u_shininess);" \
-		
+
 		"   vec3 phong_ads_light = ambient + diffuse;" \
-		
+
 		"   FragColor = vec4(phong_ads_light, 1.0) * texture(u_sampler, out_Texcoord);" \
-		"   FragColor = vec4(1.0);" \
 		"}";
 
 	// attach source code to fragment shader
@@ -612,13 +691,13 @@ int initialize(void)
 			float fi = (float)i / (float)gMeshWidth;
 
 			initial_positions[n] = vec4((fi - 0.5f) * (float)gMeshWidth,
-				                        10.0f,
-				                        (fj - 0.5f) * (float)gMeshHeight,
-				                        1.0);
+				10.0f,
+				(fj - 0.5f) * (float)gMeshHeight,
+				1.0);
 
 			initial_velocities[n] = vec4(0.0f);
 			initial_normals[n] = vec3(0.0f);
-	
+
 			// texture coords
 			initial_texcoords[n][0] = fi * 5.0f;
 			initial_texcoords[n][1] = fj * 5.0f;
@@ -635,21 +714,21 @@ int initialize(void)
 	// vertex positions
 	glGenBuffers(1, &vbo);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE*sizeof(float), NULL, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE * sizeof(float), initial_positions, GL_DYNAMIC_DRAW);
 
 	glGenBuffers(1, &vbo_norm);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo_norm);
-	glBufferData(GL_ARRAY_BUFFER, gMeshTotal*3*sizeof(float), NULL, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, gMeshTotal * 3 * sizeof(float), initial_velocities, GL_DYNAMIC_DRAW);
 
 	// vertex positions
 	glGenBuffers(6, vbo_gpu);
-	
+
 	// pos1 and pos2
-	for(int i = 0; i < 2; i++)
+	for (int i = 0; i < 2; i++)
 	{
 		glBindBuffer(GL_ARRAY_BUFFER, vbo_gpu[i]);
-		glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE*sizeof(float), initial_positions, GL_DYNAMIC_DRAW);
-	
+		glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE * sizeof(float), initial_positions, GL_DYNAMIC_DRAW);
+
 		// register our vbo with cuda graphics resource
 		error = cudaGraphicsGLRegisterBuffer(&graphicsResource[i], vbo_gpu[i], cudaGraphicsMapFlagsWriteDiscard);
 		if (error != cudaSuccess)
@@ -661,11 +740,11 @@ int initialize(void)
 	}
 
 	// vel1 and vel2
-	for(int i = 2; i < 4; i++)
+	for (int i = 2; i < 4; i++)
 	{
 		glBindBuffer(GL_ARRAY_BUFFER, vbo_gpu[i]);
-		glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE*sizeof(float), initial_velocities, GL_DYNAMIC_DRAW);
-	
+		glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE * sizeof(float), initial_velocities, GL_DYNAMIC_DRAW);
+
 		// register our vbo with cuda graphics resource
 		error = cudaGraphicsGLRegisterBuffer(&graphicsResource[i], vbo_gpu[i], cudaGraphicsMapFlagsWriteDiscard);
 		if (error != cudaSuccess)
@@ -678,8 +757,8 @@ int initialize(void)
 
 	// normals
 	glBindBuffer(GL_ARRAY_BUFFER, vbo_gpu[4]);
-	glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE*sizeof(float), initial_normals, GL_DYNAMIC_DRAW);
- 
+	glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE * sizeof(float), initial_normals, GL_DYNAMIC_DRAW);
+
 	// register our vbo with cuda graphics resource
 	error = cudaGraphicsGLRegisterBuffer(&graphicsResource[4], vbo_gpu[4], cudaGraphicsMapFlagsWriteDiscard);
 	if (error != cudaSuccess)
@@ -691,7 +770,7 @@ int initialize(void)
 
 	// texcoords
 	glBindBuffer(GL_ARRAY_BUFFER, vbo_gpu[5]);
-	glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE*sizeof(float), initial_texcoords, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE * sizeof(float), initial_texcoords, GL_DYNAMIC_DRAW);
 	glVertexAttribPointer(AMC_ATTRIBUTE_TEXCOORD0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
 	glEnableVertexAttribArray(AMC_ATTRIBUTE_TEXCOORD0);
 
@@ -720,10 +799,10 @@ int initialize(void)
 
 	glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
 
-	delete []initial_positions;
-	delete []initial_velocities;
-	delete []initial_normals;
-	delete []initial_texcoords;
+	delete[]initial_positions;
+	delete[]initial_velocities;
+	delete[]initial_normals;
+	delete[]initial_texcoords;
 
 	//////////////////////////////////////////////////////////////////////
 
@@ -741,7 +820,7 @@ int initialize(void)
 	// enable blend
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	
+
 	// clear the screen by OpenGL
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
@@ -774,8 +853,8 @@ void resize(int width, int height)
 void display(void)
 {
 	void uninitialize(void);
-	void launchCUDAKernel(float4 *, float4 *, float4 *, float4 *, unsigned int, unsigned int, float3 *, float3);
-	void launchCPUKernel(unsigned int, unsigned int, vec3);
+	void launchCUDAKernel(float4 *, float4 *, float4 *, float4 *, unsigned int, unsigned int, float3 *, float3, float);
+	void launchCPUKernel(unsigned int, unsigned int, float3);
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -786,9 +865,11 @@ void display(void)
 	//mMatrix *= rotate(0.0f, 100.0f*sinf(t), 0.0f);
 
 	mat4 vMatrix = mat4::identity();
+	static float angle = 0.0f;
+	angle += 0.005f;
 	vMatrix *= lookat(
-		vec3(0, 0.0f, 60.0f),
-		vec3(0.0f, 0.0f, 0.0f), 
+		vec3(60.0f*sinf(angle), 0.0f, 60.0f*cosf(angle)),
+		vec3(0.0f, 0.0f, 0.0f),
 		vec3(0.0f, 1.0f, 0.0f));
 
 	glUniformMatrix4fv(glGetUniformLocation(gShaderProgramObject, "u_m_matrix"), 1, GL_FALSE, mMatrix);
@@ -797,7 +878,7 @@ void display(void)
 
 	float3 wind = make_float3(0.0f, 0.0f, 0.0f);
 	if (bWind) wind = make_float3(5.0f, 0.0f, 0.0f);
-		
+
 
 	glBindVertexArray(vao);
 
@@ -849,7 +930,7 @@ void display(void)
 		float4 *ppos2 = NULL;
 		float4 *pvel1 = NULL;
 		float4 *pvel2 = NULL;
-		float3 *norm  = NULL;
+		float3 *norm = NULL;
 
 		size_t byteCount;
 		error = cudaGraphicsResourceGetMappedPointer((void **)&ppos1, &byteCount, graphicsResource[0]);
@@ -859,7 +940,7 @@ void display(void)
 			uninitialize();
 			DestroyWindow(ghWnd);
 		}
-		
+
 		error = cudaGraphicsResourceGetMappedPointer((void **)&ppos2, &byteCount, graphicsResource[1]);
 		if (error != cudaSuccess)
 		{
@@ -894,7 +975,9 @@ void display(void)
 
 
 		// 3. launch the CUDA kernel
-		launchCUDAKernel(ppos1, ppos2, pvel1, pvel2, gMeshWidth, gMeshHeight, norm, wind);
+		static float xOffset = 0.0f;
+		launchCUDAKernel(ppos1, ppos2, pvel1, pvel2, gMeshWidth, gMeshHeight, norm, wind, xOffset);
+		xOffset += 0.01f;
 
 		// 4. unmap the resource
 		error = cudaGraphicsUnmapResources(1, &graphicsResource[0], 0);
@@ -928,7 +1011,7 @@ void display(void)
 			uninitialize();
 			DestroyWindow(ghWnd);
 		}
-				
+
 		error = cudaGraphicsUnmapResources(1, &graphicsResource[4], 0);
 		if (error != cudaSuccess)
 		{
@@ -940,10 +1023,10 @@ void display(void)
 	}
 	else
 	{
-		launchCPUKernel(gMeshWidth, gMeshHeight, vec3(wind.x, wind.y, wind.z));
-		
+		launchCPUKernel(gMeshWidth, gMeshHeight, wind);
+
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE * sizeof(float), pos1, GL_DYNAMIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE * sizeof(float), pos, GL_DYNAMIC_DRAW);
 	}
 
 	// bind to the respective buffer
@@ -955,7 +1038,7 @@ void display(void)
 
 	if (bOnGPU) glBindBuffer(GL_ARRAY_BUFFER, vbo_gpu[4]);
 	else glBindBuffer(GL_ARRAY_BUFFER, vbo_norm);
-	
+
 	glVertexAttribPointer(AMC_ATTRIBUTE_NORMAL, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 	glEnableVertexAttribArray(AMC_ATTRIBUTE_NORMAL);
 
@@ -970,14 +1053,14 @@ void display(void)
 	glUniform1f(glGetUniformLocation(gShaderProgramObject, "front"), -1.0f);
 	glCullFace(GL_BACK);
 	glDrawElements(GL_TRIANGLE_STRIP, lines * 2, GL_UNSIGNED_INT, NULL);
-	
+
 	// back side
 	glUniform1f(glGetUniformLocation(gShaderProgramObject, "front"), -1.0f);
 	glCullFace(GL_FRONT);
 	glDrawElements(GL_TRIANGLE_STRIP, lines * 2, GL_UNSIGNED_INT, NULL);
 
 	glBindVertexArray(0);
-	
+
 	//////////////////////////////////////////////////////////////////////////////////////////
 
 	// unuse program
@@ -992,7 +1075,7 @@ void uninitialize(void)
 	if (vbo_gpu)
 	{
 		glDeleteBuffers(4, vbo_gpu);
-		for(int i = 0; i < 4; i++)
+		for (int i = 0; i < 4; i++)
 			vbo_gpu[i] = 0;
 	}
 
@@ -1008,7 +1091,7 @@ void uninitialize(void)
 		vao = 0;
 	}
 
-	for(int i = 0 ; i < 5; i++)
+	for (int i = 0; i < 5; i++)
 	{
 		if (graphicsResource[i])
 		{
@@ -1089,9 +1172,10 @@ void uninitialize(void)
 	}
 }
 
-void launchCPUKernel(unsigned int width, unsigned int height, vec3 wind)
+void launchCPUKernel(unsigned int width, unsigned int height, float3 wind)
 {
 	vec3 make_vec3(float4);
+	vec3 make_vec3(float *);
 
 	const float m = 1.0f;
 	const float t = 0.000005 * 4;
@@ -1100,158 +1184,190 @@ void launchCPUKernel(unsigned int width, unsigned int height, vec3 wind)
 	const float rest_length = 1.00;
 	const float rest_length_diag = 1.41;
 
-	float *ppos1 = &pos1[0][0][0];
-	float *ppos2 = &pos2[0][0][0];
-	float *ppos1 = &pos1[0][0][0];
-	float *ppos1 = &pos1[0][0][0];
+	// latest position in global pos
 
-	for(int count = 0; count < 1000; count++)
+	float4 *ppos1 = pos;
+	float4 *ppos2 = pos1;
+	float4 *pvel1 = vel;
+	float4 *pvel2 = vel1;
+
+	for (int count = 0; count < 1000; count++)
 	{
-		for (int x = 0; x < width; x++) 
+		for (unsigned int x = 0; x < width; x++)
 		{
-			for (int y = 0; y < height; y++)
+			for (unsigned int y = 0; y < height; y++)
 			{
-					unsigned int idx = ((y*width) + x)*4;
-					vec3 p = vec3(ppos1[idx+0], ppos1[idx+1], ppos1[idx+2]);
-					vec3 u = vec3(pvel1[idx+0], pvel1[idx+1], pvel1[idx+2]);
-					vec3 F = vec3(0.0f, -10.0f, 0.0f) * m - c * u;
-					int i = 0;
+				unsigned int idx = (y*width) + x;
+				float3 p = make_float3(pos1[idx].x, pos1[idx].y, pos1[idx].z);
+				float3 u = make_float3(vel1[idx].x, vel1[idx].y, vel1[idx].z);
+				float3 F = make_float3(0.0f, -10.0f, 0.0f) * m - c * u;
+				int i = 0;
 
-					F = F + wind;
+				F = F + wind;
 
-					if (true) // (pvel1[idx].w >= 0.0f)
+				if (true) // (vel1[idx].w >= 0.0f)
+				{
+					// calculate 8 connections
+					// up
+					if (y < height - 1)
 					{
-						// calculate 8 connections
-						// up
-						if (y < height-1)
-						{
-							i = idx+width;
-							vec3 q = vec3(ppos1[i+0], ppos1[i+1], ppos1[i+2]);
-							vec3 d = q - p;
-							float x = length(d);
-							F = F + -k * (rest_length - x) * normalize(d);
-						}
-						// down
-						if (y > 0)
-						{
-							i = idx-width;
-							vec3 q = vec3(ppos1[i+0], ppos1[i+1], ppos1[i+2]);
-							vec3 d = q - p;
-							float x = length(d);
-							F = F + -k * (rest_length - x) * normalize(d);
-						}
-						// left
-						if (x > 0)
-						{
-							i = idx-1;
-							vec3 q = vec3(ppos1[i+0], ppos1[i+1], ppos1[i+2]);
-							vec3 d = q - p;
-							float x = length(d);
-							F = F + -k * (rest_length - x) * normalize(d);
-						}
-						// right
-						if (x < width-1)
-						{
-							i = idx+1;
-							vec3 q = vec3(ppos1[i+0], ppos1[i+1], ppos1[i+2]);
-							vec3 d = q - p;
-							float x = length(d);
-							F = F + -k * (rest_length - x) * normalize(d);
-						}
-
-						// lower left
-						if (x > 0 && y > 0)
-						{
-							i = idx-1-width;
-							vec3 q = vec3(ppos1[i+0], ppos1[i+1], ppos1[i+2]);
-							vec3 d = q - p;
-							float x = length(d);
-							F = F + -k * (rest_length_diag - x) * normalize(d);
-						}
-						// upper right
-						if (x < (width-1) && y < (height-1))
-						{
-							i = idx+1+width;
-							vec3 q = vec3(ppos1[i+0], ppos1[i+1], ppos1[i+2]);
-							vec3 d = q - p;
-							float x = length(d);
-							F = F + -k * (rest_length_diag - x) * normalize(d);
-						}
-						// lower right
-						if (x < (width-1) && y > 0)
-						{
-							i = idx+1-width;
-							vec3 q = vec3(ppos1[i+0], ppos1[i+1], ppos1[i+2]);
-							vec3 d = q - p;
-							float x = length(d);
-							F = F + -k * (rest_length_diag - x) * normalize(d);
-						}
-						// upper left
-						if (x > 0 && y < (height-1))
-						{
-							i = idx-1+width;
-							vec3 q = vec3(ppos1[i+0], ppos1[i+1], ppos1[i+2]);
-							vec3 d = q - p;
-							float x = length(d);
-							F = F + -k * (rest_length_diag - x) * normalize(d);
-						}
-
+						i = idx + width;
+						float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+						float3 d = q - p;
+						float x = length(d);
+						F = F + -k * (rest_length - x) * normalize(d);
 					}
-					else
+					// down
+					if (y > 0)
 					{
-						F = vec3(0.0f, 0.0f, 0.0f);
+						i = idx - width;
+						float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+						float3 d = q - p;
+						float x = length(d);
+						F = F + -k * (rest_length - x) * normalize(d);
+					}
+					// left
+					if (x > 0)
+					{
+						i = idx - 1;
+						float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+						float3 d = q - p;
+						float x = length(d);
+						F = F + -k * (rest_length - x) * normalize(d);
+					}
+					// right
+					if (x < width - 1)
+					{
+						i = idx + 1;
+						float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+						float3 d = q - p;
+						float x = length(d);
+						F = F + -k * (rest_length - x) * normalize(d);
 					}
 
-					// self collision!
-					// for(int i = 0; i < width*height; i++)
-					// {
-					// 	vec3 q = make_float3(ppos1[i].x, ppos1[i].y, ppos1[i].z);
-					// 	vec3 d = q - p;
-					// 	if(length(d) > 0.2f)
-					// 		F = F - (0.8*F);
-					// }
-
-					vec3 a = F/m;
-					vec3 s = u * t + 0.5f * a * t * t;
-					vec3 v = u + a * t;
-
-					
-					// else if (vec3(p+s).y <= -4.0 && abs(vec3(p+s).x) < 5.5 && abs(vec3(p+s).z) < 5.5)
-					// {	
-					// 	s = vec3(0.0);
-					// 	v = vec3(0.0);
-					// }	
-					// else if (length(vec3(p+s)-vec3(0.0,4.0,0.0)) < 5.0)
-					// {	
-					// 	s = vec3(0.0);
-					// 	v = vec3(0.0);
-					// }	
-					
-					vec3 pos = p + s;
-					
-					if (pos[1] <= -2.0 && abs((int)pos[0]) < 10.5 && abs((int)pos[2]) < 10.5)
-					{	
-						pos = p;
-						v = vec3(0.0f, 0.0f, 0.0f);
+					// lower left
+					if (x > 0 && y > 0)
+					{
+						i = idx - 1 - width;
+						float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+						float3 d = q - p;
+						float x = length(d);
+						F = F + -k * (rest_length_diag - x) * normalize(d);
+					}
+					// upper right
+					if (x < (width - 1) && y < (height - 1))
+					{
+						i = idx + 1 + width;
+						float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+						float3 d = q - p;
+						float x = length(d);
+						F = F + -k * (rest_length_diag - x) * normalize(d);
+					}
+					// lower right
+					if (x < (width - 1) && y > 0)
+					{
+						i = idx + 1 - width;
+						float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+						float3 d = q - p;
+						float x = length(d);
+						F = F + -k * (rest_length_diag - x) * normalize(d);
+					}
+					// upper left
+					if (x > 0 && y < (height - 1))
+					{
+						i = idx - 1 + width;
+						float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+						float3 d = q - p;
+						float x = length(d);
+						F = F + -k * (rest_length_diag - x) * normalize(d);
 					}
 
-					ppos2[idx+0] = pos[0];
-					ppos2[idx+1] = pos[1];
-					ppos2[idx+2] = pos[2];
-					ppos2[idx+3] = 1.0f;
+				}
+				else
+				{
+					F = make_float3(0.0f, 0.0f, 0.0f);
+				}
 
-					pvel2[idx+0] = v[0];
-					pvel2[idx+1] = v[1];
-					pvel2[idx+2] = v[2];
-					pvel2[idx+3] = pvel1[idx+3];
+				// self collision!
+				//int nbrs[] = {idx+width,idx-width,idx-1,idx+1,idx-1-width,idx+1+width,idx+1-width,idx-1+width};
 
-					float *tmp = ppos1;
-					ppos1 = ppos2;
-					ppos2 = tmp;
 
-					tmp = pvel1;
-					pvel1 = pvel2;
-					pvel2 = tmp;
+				float3 a = F / m;
+				float3 s = u * t + 0.5f * a * t * t;
+				float3 v = u + a * t;
+
+
+				// else if (vec3(p+s).y <= -4.0 && abs(vec3(p+s).x) < 5.5 && abs(vec3(p+s).z) < 5.5)
+				// {	
+				// 	s = vec3(0.0);
+				// 	v = vec3(0.0);
+				// }	
+
+
+				// float force = length(F);
+				// for(int i = 0; i < width*height && i!=idx; i++)
+				// {
+				// 	float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+				// 	float3 d = q - pos;
+				// 	if(length(d) < 0.4)
+				// 		v = v-force*normalize(d);
+
+				// }
+
+				// if (pos.y <= -2.0 && abs(pos.x) < 10.5 && abs(pos.z) < 10.5)
+				// {	
+				// 	pos = p;
+				// 	v = make_float3(0.0f, 0.0f, 0.0f);
+				// }
+				// else 
+
+
+
+				float3 op = p - make_float3(-15.0f, -4.0f, -15.0f);
+				float lop = length(op);
+				if (lop < 8.0)
+				{
+					s.y = 0.0f;
+					v.y = 0.0f;
+				}
+
+				op = p - make_float3(15.0f, -4.0f, -15.0f);
+				lop = length(op);
+				if (lop < 8.0)
+				{
+					s.y = 0.0f;
+					v.y = 0.0f;
+				}
+
+				op = p - make_float3(-15.0f, -4.0f, 15.0f);
+				lop = length(op);
+				if (lop < 8.0)
+				{
+					s.y = 0.0f;
+					v.y = 0.0f;
+				}
+
+				op = p - make_float3(15.0f, -4.0f, 15.0f);
+				lop = length(op);
+				if (lop < 8.0)
+				{
+					s.y = 0.0f;
+					v.y = 0.0f;
+				}
+
+
+				// if (p.y <= -4.0 && abs(p.x) < 15.5 && abs(p.z) < 15.5)
+				// {
+				// 	s.y = 0.0f;
+				// 	v.y = 0.0f;
+				// }
+
+
+
+				float3 pos = p + s;
+
+				ppos2[idx] = make_float4(pos.x, pos.y, pos.z, 1.0f);
+				pvel2[idx] = make_float4(v.x, v.y, v.z, vel1[idx].w);
 			}
 		}
 	}
@@ -1259,32 +1375,32 @@ void launchCPUKernel(unsigned int width, unsigned int height, vec3 wind)
 	fprintf(gpFile, "\nCalculating normals!");
 
 	// normals
-	vec3 *norm = new vec3[gMeshTotal];
-	for (int x = 0; x < width; x++) 
+	float3 *norm = new float3[gMeshTotal];
+	for (int x = 0; x < width; x++)
 	{
 		for (int y = 0; y < height; y++)
 		{
 			unsigned int idx = (y*width) + x;
 
-			vec3 p = vec3(ppos1[idx+0], ppos1[idx+1], ppos1[idx+2]);
-			vec3 n = vec3(0.0f, 0.0f, 0.0f);
-			vec3 a, b, c;
+			float3 p = make_float3(pos[idx].x, pos[idx].y, pos[idx].z);
+			float3 n = make_float3(0.0f, 0.0f, 0.0f);
+			float3 a, b, c;
 
-			if (y < height-1)
+			if (y < height - 1)
 			{
-				c = make_vec3(ppos1[idx+width]) - p;
-				if (x < width-1)
+				c = make_float3(pos[idx + width]) - p;
+				if (x < width - 1)
 				{
-					a = make_vec3(ppos1[idx+1]) - p;
-					b = make_vec3(ppos1[idx+width+1]) - p;
+					a = make_float3(pos[idx + 1]) - p;
+					b = make_float3(pos[idx + width + 1]) - p;
 					n = n + cross(a, b);
 					n = n + cross(b, c);
 				}
 				if (x > 0)
 				{
 					a = c;
-					b = make_vec3(ppos1[idx+width-1]) - p;
-					c = make_vec3(ppos1[idx-1]) - p;
+					b = make_float3(pos[idx + width - 1]) - p;
+					c = make_float3(pos[idx - 1]) - p;
 					n = n + cross(a, b);
 					n = n + cross(b, c);
 				}
@@ -1292,19 +1408,19 @@ void launchCPUKernel(unsigned int width, unsigned int height, vec3 wind)
 
 			if (y > 0)
 			{
-				c = make_vec3(ppos1[idx-width]) - p;
+				c = make_float3(pos[idx - width]) - p;
 				if (x > 0)
 				{
-					a = make_vec3(ppos1[idx-1]) - p;
-					b = make_vec3(ppos1[idx-width-1]) - p;
+					a = make_float3(pos[idx - 1]) - p;
+					b = make_float3(pos[idx - width - 1]) - p;
 					n = n + cross(a, b);
 					n = n + cross(b, c);
 				}
-				if (x < width-1)
+				if (x < width - 1)
 				{
 					a = c;
-					b = make_vec3(ppos1[idx-width+1]) - p;
-					c = make_vec3(ppos1[idx+1]) - p;
+					b = make_float3(pos[idx - width + 1]) - p;
+					c = make_float3(pos[idx + 1]) - p;
 					n = n + cross(a, b);
 					n = n + cross(b, c);
 				}
@@ -1313,11 +1429,11 @@ void launchCPUKernel(unsigned int width, unsigned int height, vec3 wind)
 			norm[idx] = n;
 		}
 	}
-	
-	glBindBuffer(GL_ARRAY_BUFFER, vbo_norm);
-	glBufferData(GL_ARRAY_BUFFER, gMeshTotal*3*sizeof(float), norm, GL_DYNAMIC_DRAW);
 
-	delete []norm;
+	glBindBuffer(GL_ARRAY_BUFFER, vbo_norm);
+	glBufferData(GL_ARRAY_BUFFER, gMeshTotal * 3 * sizeof(float), norm, GL_DYNAMIC_DRAW);
+
+	delete[]norm;
 }
 
 // Convert image resource to image data
@@ -1359,7 +1475,269 @@ BOOL loadTexture(GLuint* texture, TCHAR imageResourceID[])
 	return bStatus;
 }
 
-vec3 make_vec3(float4 a)
+
+// cloth update
+__global__ void cloth_kernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *vel2, unsigned int width, unsigned int height, float3 wind, float xOffset)
 {
-	return vec3(a.x, a.y, a.z);
+	unsigned int x = (blockIdx.x*blockDim.x) + threadIdx.x;
+	unsigned int y = (blockIdx.y*blockDim.y) + threadIdx.y;
+
+	unsigned int idx = (y*width) + x;
+
+	if (idx >= width * height) return;
+
+	const float m = 1.0f;
+	const float t = 0.000005 * 4;
+	const float k = 6000.0;
+	const float c = 0.95;
+	const float rest_length = 1.00;
+	const float rest_length_diag = 1.41;
+
+	float3 p = make_float3(pos1[idx].x, pos1[idx].y, pos1[idx].z);
+	float3 u = make_float3(vel1[idx].x, vel1[idx].y, vel1[idx].z);
+	float3 F = make_float3(0.0f, -10.0f, 0.0f) * m - c * u;
+	int i = 0;
+
+	F = F + wind;
+
+	if (true) // (vel1[idx].w >= 0.0f)
+	{
+		// calculate 8 connections
+		// up
+		if (y < height - 1)
+		{
+			i = idx + width;
+			float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+			float3 d = q - p;
+			float x = length(d);
+			F = F + -k * (rest_length - x) * normalize(d);
+		}
+		// down
+		if (y > 0)
+		{
+			i = idx - width;
+			float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+			float3 d = q - p;
+			float x = length(d);
+			F = F + -k * (rest_length - x) * normalize(d);
+		}
+		// left
+		if (x > 0)
+		{
+			i = idx - 1;
+			float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+			float3 d = q - p;
+			float x = length(d);
+			F = F + -k * (rest_length - x) * normalize(d);
+		}
+		// right
+		if (x < width - 1)
+		{
+			i = idx + 1;
+			float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+			float3 d = q - p;
+			float x = length(d);
+			F = F + -k * (rest_length - x) * normalize(d);
+		}
+
+		// lower left
+		if (x > 0 && y > 0)
+		{
+			i = idx - 1 - width;
+			float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+			float3 d = q - p;
+			float x = length(d);
+			F = F + -k * (rest_length_diag - x) * normalize(d);
+		}
+		// upper right
+		if (x < (width - 1) && y < (height - 1))
+		{
+			i = idx + 1 + width;
+			float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+			float3 d = q - p;
+			float x = length(d);
+			F = F + -k * (rest_length_diag - x) * normalize(d);
+		}
+		// lower right
+		if (x < (width - 1) && y > 0)
+		{
+			i = idx + 1 - width;
+			float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+			float3 d = q - p;
+			float x = length(d);
+			F = F + -k * (rest_length_diag - x) * normalize(d);
+		}
+		// upper left
+		if (x > 0 && y < (height - 1))
+		{
+			i = idx - 1 + width;
+			float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+			float3 d = q - p;
+			float x = length(d);
+			F = F + -k * (rest_length_diag - x) * normalize(d);
+		}
+
+	}
+	else
+	{
+		F = make_float3(0.0f, 0.0f, 0.0f);
+	}
+
+	// self collision!
+	//int nbrs[] = {idx+width,idx-width,idx-1,idx+1,idx-1-width,idx+1+width,idx+1-width,idx-1+width};
+
+
+	float3 a = F / m;
+	float3 s = u * t + 0.5f * a * t * t;
+	float3 v = u + a * t;
+
+
+	// else if (vec3(p+s).y <= -4.0 && abs(vec3(p+s).x) < 5.5 && abs(vec3(p+s).z) < 5.5)
+	// {	
+	// 	s = vec3(0.0);
+	// 	v = vec3(0.0);
+	// }	
+
+
+	// float force = length(F);
+	// for(int i = 0; i < width*height && i!=idx; i++)
+	// {
+	// 	float3 q = make_float3(pos1[i].x, pos1[i].y, pos1[i].z);
+	// 	float3 d = q - pos;
+	// 	if(length(d) < 0.4)
+	// 		v = v-force*normalize(d);
+
+	// }
+
+	// if (pos.y <= -2.0 && abs(pos.x) < 10.5 && abs(pos.z) < 10.5)
+	// {	
+	// 	pos = p;
+	// 	v = make_float3(0.0f, 0.0f, 0.0f);
+	// }
+	// else 
+
+
+
+	float3 op = p - make_float3(-15.0f, -4.0f, -15.0f);
+	float lop = length(op);
+	if (lop < 8.0)
+	{
+		s.y = 0.0f;
+		v.y = 0.0f;
+	}
+
+	op = p - make_float3(15.0f, -4.0f, -15.0f);
+	lop = length(op);
+	if (lop < 8.0)
+	{
+		s.y = 0.0f;
+		v.y = 0.0f;
+	}
+
+	op = p - make_float3(-15.0f, -4.0f, 15.0f);
+	lop = length(op);
+	if (lop < 8.0)
+	{
+		s.y = 0.0f;
+		v.y = 0.0f;
+	}
+
+	op = p - make_float3(15.0f, -4.0f, 15.0f);
+	lop = length(op);
+	if (lop < 8.0)
+	{
+		s.y = 0.0f;
+		v.y = 0.0f;
+	}
+
+
+	// if (p.y <= -4.0 && abs(p.x) < 15.5 && abs(p.z) < 15.5)
+	// {
+	// 	s.y = 0.0f;
+	// 	v.y = 0.0f;
+	// }
+
+
+
+	float3 pos = p + s;
+
+	pos2[idx] = make_float4(pos.x, pos.y, pos.z, 1.0f);
+	vel2[idx] = make_float4(v.x, v.y, v.z, vel1[idx].w);
+
+	return;
 }
+
+__global__ void cloth_normals(float4 *pos, float3 *norm, unsigned int width, unsigned int height)
+{
+	unsigned int x = (blockIdx.x*blockDim.x) + threadIdx.x;
+	unsigned int y = (blockIdx.y*blockDim.y) + threadIdx.y;
+
+	unsigned int idx = (y*width) + x;
+
+	if (idx >= width * height) return;
+
+	float3 p = make_float3(pos[idx].x, pos[idx].y, pos[idx].z);
+	float3 n = make_float3(0.0f, 0.0f, 0.0f);
+	float3 a, b, c;
+
+	if (y < height - 1)
+	{
+		c = make_float3(pos[idx + width]) - p;
+		if (x < width - 1)
+		{
+			a = make_float3(pos[idx + 1]) - p;
+			b = make_float3(pos[idx + width + 1]) - p;
+			n = n + cross(a, b);
+			n = n + cross(b, c);
+		}
+		if (x > 0)
+		{
+			a = c;
+			b = make_float3(pos[idx + width - 1]) - p;
+			c = make_float3(pos[idx - 1]) - p;
+			n = n + cross(a, b);
+			n = n + cross(b, c);
+		}
+	}
+
+	if (y > 0)
+	{
+		c = make_float3(pos[idx - width]) - p;
+		if (x > 0)
+		{
+			a = make_float3(pos[idx - 1]) - p;
+			b = make_float3(pos[idx - width - 1]) - p;
+			n = n + cross(a, b);
+			n = n + cross(b, c);
+		}
+		if (x < width - 1)
+		{
+			a = c;
+			b = make_float3(pos[idx - width + 1]) - p;
+			c = make_float3(pos[idx + 1]) - p;
+			n = n + cross(a, b);
+			n = n + cross(b, c);
+		}
+	}
+
+	norm[idx] = n;
+}
+
+void launchCUDAKernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *vel2, unsigned int meshWidth, unsigned int meshHeight, float3 *norm, float3 wind, float xOffset)
+{
+	dim3 block(16, 16, 1);
+	dim3 grid(meshWidth / block.x, meshHeight / block.y, 1);
+
+	for (int i = 0; i < 500; i++)
+	{
+		cloth_kernel << <grid, block >> > (pos1, pos2, vel1, vel2, meshWidth, meshHeight, wind, xOffset);
+		//cudaDeviceSynchronize();
+		cloth_kernel << <grid, block >> > (pos2, pos1, vel2, vel1, meshWidth, meshHeight, wind, xOffset);
+		//cudaDeviceSynchronize();
+
+	}
+	//cudaDeviceSynchronize();
+	cloth_normals << <grid, block >> > (pos1, norm, meshWidth, meshHeight);
+}
+
+
