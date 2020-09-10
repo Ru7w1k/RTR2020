@@ -1377,8 +1377,17 @@ void launchCPUKernel(unsigned int width, unsigned int height, float3 wind)
 				float3 pos = p + s;
 				ppos2[idx] = make_float4(pos.x, pos.y, pos.z, 1.0f);
 				pvel2[idx] = make_float4(v.x, v.y, v.z, vel1[idx].w);
+
 			}
 		}
+		// swap pointers
+		float4 *tmp = ppos1;
+		ppos1 = ppos2;
+		ppos2 = tmp;
+
+		tmp = pvel1;
+		pvel1 = pvel2;
+		pvel2 = tmp;
 	}
 
 	fprintf(gpFile, "\nCalculating normals!");
