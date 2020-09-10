@@ -4,6 +4,9 @@
 #include <gl/GL.h>
 #include <gl/GLU.h>
 
+#define _USE_MATH_DEFINES
+#include <math.h>
+
 #include "OGLTemplate.h"
 
 #pragma comment(lib, "opengl32.lib")
@@ -29,6 +32,18 @@ FILE* gpFile = NULL;
 DWORD dwStyle;
 WINDOWPLACEMENT wpPrev = { sizeof(WINDOWPLACEMENT) };
 
+GLfloat colors[10][3] = {
+	{1.0f, 0.0f, 0.0f}, // red
+	{0.0f, 1.0f, 0.0f}, // green
+	{0.0f, 0.0f, 1.0f}, // blue
+	{0.0f, 1.0f, 1.0f}, // cyan
+	{1.0f, 0.0f, 1.0f}, // magenta
+	{1.0f, 1.0f, 0.0f}, // yellow
+	{1.0f, 1.0f, 1.0f}, // white
+	{0.5f, 0.5f, 0.5f}, // gray
+	{1.0f, 0.5f, 0.0f}, // orange
+	{0.0f, 0.5f, 0.5f}  // ?
+};
 
 // WinMain()
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLine, int iCmdShow)
@@ -77,7 +92,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 	// create window
 	hwnd = CreateWindowEx(WS_EX_APPWINDOW,
 		szAppName,
-		TEXT("OpenGL | Graphpaper with Triangle"),
+		TEXT("OpenGL | Concentric Circles"),
 		WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE,
 		(width / 2) - 400,
 		(height / 2) - 300,
@@ -304,59 +319,20 @@ void display(void)
 
 	glTranslatef(0.0f, 0.0f, -3.0f);
 	
-	glLineWidth(1.0f);
-	glBegin(GL_LINES);
-
-		// horizontal lines
-		glColor3f(0.0f, 0.0f, 1.0f);
-		for (float fOffset = -1.0f; fOffset <= 0; fOffset += (1.0f / 20.0f))
-		{
-			glVertex3f( -1.0f, fOffset, 0.0f);
-			glVertex3f(  1.0f, fOffset, 0.0f);
-
-			glVertex3f( -1.0f, fOffset + 1.0f+(1.0f / 20.0f), 0.0f);
-			glVertex3f(  1.0f, fOffset + 1.0f+(1.0f / 20.0f), 0.0f);
-		}
-
-		// vertical lines
-		glColor3f(0.0f, 0.0f, 1.0f);
-		for (float fOffset = -1.0; fOffset <= 0; fOffset += (1.0 / 20.0f))
-		{
-			glVertex3f(fOffset, -1.0f, 0.0f);
-			glVertex3f(fOffset,  1.0f, 0.0f);
-
-			glVertex3f(fOffset + 1.0+(1.0 / 20.0f), -1.0f, 0.0f);
-			glVertex3f(fOffset + 1.0+(1.0 / 20.0f),  1.0f, 0.0f);
-		}
-	glEnd();
-
-	glLineWidth(2.0f);
-	glBegin(GL_LINES);
-
-		// X-axis
-		glColor3f(1.0f, 0.0f, 0.0f);
-		glVertex3f(-1.0f, 0.0f, 0.0f);
-		glVertex3f( 1.0f, 0.0f, 0.0f);
-
-		// Y-axis
-		glColor3f(0.0f, 1.0f, 0.0f);
-		glVertex3f(0.0f, -1.0f, 0.0f);
-		glVertex3f(0.0f, 1.0f, 0.0f);
-
-	glEnd();
-
-	glLineWidth(3.0f);
-	glBegin(GL_LINE_LOOP);
+	GLfloat len = 0.3f;
+	for (int i = 0; i < 10; i++)
 	{
-		// triangle
-		glColor3f(1.0f, 1.0f, 0.0f);
+		glBegin(GL_LINE_LOOP);
+		{
+			glColor3fv(colors[i]);
 
-		glVertex3f( 0.0f,  0.5f, 0.0f);
-		glVertex3f(-0.5f, -0.5f, 0.0f);
-		glVertex3f( 0.5f, -0.5f, 0.0f);
+			for (float angle = 0.0f; angle <= 2.0f*M_PI; angle += 0.01f)
+				glVertex3f(len*cosf(angle), len*sinf(angle), 0.0f);	
+		}
+		glEnd();
 
+		len += 0.1f;
 	}
-	glEnd();
 
 	SwapBuffers(ghdc);
 }

@@ -77,7 +77,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 	// create window
 	hwnd = CreateWindowEx(WS_EX_APPWINDOW,
 		szAppName,
-		TEXT("OpenGL | Graphpaper with Triangle"),
+		TEXT("OpenGL | Kundali"),
 		WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE,
 		(width / 2) - 400,
 		(height / 2) - 300,
@@ -304,57 +304,37 @@ void display(void)
 
 	glTranslatef(0.0f, 0.0f, -3.0f);
 	
-	glLineWidth(1.0f);
-	glBegin(GL_LINES);
-
-		// horizontal lines
-		glColor3f(0.0f, 0.0f, 1.0f);
-		for (float fOffset = -1.0f; fOffset <= 0; fOffset += (1.0f / 20.0f))
-		{
-			glVertex3f( -1.0f, fOffset, 0.0f);
-			glVertex3f(  1.0f, fOffset, 0.0f);
-
-			glVertex3f( -1.0f, fOffset + 1.0f+(1.0f / 20.0f), 0.0f);
-			glVertex3f(  1.0f, fOffset + 1.0f+(1.0f / 20.0f), 0.0f);
-		}
-
-		// vertical lines
-		glColor3f(0.0f, 0.0f, 1.0f);
-		for (float fOffset = -1.0; fOffset <= 0; fOffset += (1.0 / 20.0f))
-		{
-			glVertex3f(fOffset, -1.0f, 0.0f);
-			glVertex3f(fOffset,  1.0f, 0.0f);
-
-			glVertex3f(fOffset + 1.0+(1.0 / 20.0f), -1.0f, 0.0f);
-			glVertex3f(fOffset + 1.0+(1.0 / 20.0f),  1.0f, 0.0f);
-		}
-	glEnd();
-
-	glLineWidth(2.0f);
-	glBegin(GL_LINES);
-
-		// X-axis
-		glColor3f(1.0f, 0.0f, 0.0f);
-		glVertex3f(-1.0f, 0.0f, 0.0f);
-		glVertex3f( 1.0f, 0.0f, 0.0f);
-
-		// Y-axis
-		glColor3f(0.0f, 1.0f, 0.0f);
-		glVertex3f(0.0f, -1.0f, 0.0f);
-		glVertex3f(0.0f, 1.0f, 0.0f);
-
-	glEnd();
-
-	glLineWidth(3.0f);
 	glBegin(GL_LINE_LOOP);
 	{
-		// triangle
-		glColor3f(1.0f, 1.0f, 0.0f);
+		glColor3f(1.0f, 1.0f, 1.0f);
 
-		glVertex3f( 0.0f,  0.5f, 0.0f);
-		glVertex3f(-0.5f, -0.5f, 0.0f);
-		glVertex3f( 0.5f, -0.5f, 0.0f);
+		glVertex3f( 1.4f,  1.0f, 0.0f);
+		glVertex3f(-1.4f,  1.0f, 0.0f);
+		glVertex3f(-1.4f, -1.0f, 0.0f);
+		glVertex3f( 1.4f, -1.0f, 0.0f);
+	}
+	glEnd();
 
+	glBegin(GL_LINE_LOOP);
+	{
+		glColor3f(1.0f, 1.0f, 1.0f);
+
+		glVertex3f( 0.0f,  1.0f, 0.0f);
+		glVertex3f(-1.4f,  0.0f, 0.0f);
+		glVertex3f( 0.0f, -1.0f, 0.0f);
+		glVertex3f( 1.4f,  0.0f, 0.0f);
+	}
+	glEnd();
+
+	glBegin(GL_LINES);
+	{
+		glColor3f(1.0f, 1.0f, 1.0f);
+
+		glVertex3f(-1.4f,  1.0f, 0.0f);
+		glVertex3f( 1.4f, -1.0f, 0.0f);
+
+		glVertex3f( 1.4f,  1.0f, 0.0f);
+		glVertex3f(-1.4f, -1.0f, 0.0f);
 	}
 	glEnd();
 

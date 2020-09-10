@@ -304,9 +304,8 @@ void display(void)
 
 	glTranslatef(0.0f, 0.0f, -3.0f);
 	
+	glLineWidth(1.0f);
 	glBegin(GL_LINES);
-
-		glLineWidth(1.0f);
 
 		// horizontal lines
 		glColor3f(0.0f, 0.0f, 1.0f);
@@ -329,8 +328,11 @@ void display(void)
 			glVertex3f(fOffset + 1.0+(1.0 / 20.0f), -1.0f, 0.0f);
 			glVertex3f(fOffset + 1.0+(1.0 / 20.0f),  1.0f, 0.0f);
 		}
+	glEnd();
 
-		glLineWidth(2.0f);
+	glLineWidth(2.0f);
+	glBegin(GL_LINES);
+
 		// X-axis
 		glColor3f(1.0f, 0.0f, 0.0f);
 		glVertex3f(-1.0f, 0.0f, 0.0f);
