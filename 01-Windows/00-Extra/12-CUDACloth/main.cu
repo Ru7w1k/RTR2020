@@ -1,6 +1,7 @@
 // Headers
 #include <Windows.h>
 #include <stdio.h>
+#include <string>
 
 #include <GL/glew.h>
 #include <gl/GL.h>
@@ -35,12 +36,14 @@ enum {
 #define CLOTH_TABLE 	2
 #define CLOTH_SPHERES 	3
 
-
 // Global Variables
 const int gMeshWidth = 6 * 8;
 const int gMeshHeight = 6 * 8;
 const int gMeshTotal = gMeshWidth * gMeshHeight;
 int gState = CLOTH_CURTAIN;
+
+int gWidth;
+int gHeight;
 
 #define MY_ARRAY_SIZE gMeshWidth*gMeshHeight*4
 
@@ -441,7 +444,7 @@ int initialize(void)
 	void uninitialize(void);
 	BOOL loadTexture(GLuint*, TCHAR[]);
 	void GetPresetData(vec4*);
-
+	void InitFont(void);
 
 	// variable declarations
 	PIXELFORMATDESCRIPTOR pfd;
@@ -864,6 +867,9 @@ int initialize(void)
 	loadTexture(&texCloths[0], MAKEINTRESOURCE(IDBITMAP_CLOTH1));
 	loadTexture(&texCloths[1], MAKEINTRESOURCE(IDBITMAP_CLOTH2));
 
+	// initialize font lib
+	InitFont();
+
 	perspectiveProjectionMatrix = mat4::identity();
 
 	// warm-up call to resize
@@ -879,8 +885,10 @@ void resize(int width, int height)
 		height = 1;
 	}
 
-	glViewport(0, 0, (GLsizei)width, (GLsizei)height);
+	gWidth = width;
+	gHeight = height;	
 
+	glViewport(0, 0, (GLsizei)width, (GLsizei)height);
 	perspectiveProjectionMatrix = perspective(45.0, (float)width / (float)height, 0.1f, 100.0f);
 }
 
@@ -890,8 +898,15 @@ void display(void)
 	void uninitialize(void);
 	void launchCUDAKernel(float4 *, float4 *, float4 *, float4 *, unsigned int, unsigned int, float3 *, float3, float);
 	void launchCPUKernel(unsigned int, unsigned int, float3);
+	void RenderText(std::string, mat4, GLfloat, GLfloat, GLfloat, vec3);
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	// render text
+	RenderText(bOnGPU?"GPU":"CPU", 
+		ortho(0.0f, 1000.0f, 0.0f, 1000.0f*((float)gHeight/(float)gWidth), -1.0f, 1.0f),
+		0.0f, 0.0f, 0.15f,
+		bOnGPU?vec3(0.0f, 1.0f, 0.0f):vec3(1.0f));
 
 	// use shader program
 	glUseProgram(gShaderProgramObject);
@@ -1075,7 +1090,7 @@ void display(void)
 	glEnableVertexAttribArray(AMC_ATTRIBUTE_NORMAL);
 
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, texCloths[1]);
+	glBindTexture(GL_TEXTURE_2D, texCloths[0]);
 
 	int lines = (gMeshWidth * (gMeshHeight - 1)) + gMeshWidth;
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_index);
@@ -1091,17 +1106,13 @@ void display(void)
 	glUniform1f(glGetUniformLocation(gShaderProgramObject, "front"), -1.0f);
 	glCullFace(GL_BACK);
 	glDrawElements(GL_TRIANGLE_STRIP, lines * 2, GL_UNSIGNED_INT, NULL);
-
-
-
-
 	glBindVertexArray(0);
-
+	
 	//////////////////////////////////////////////////////////////////////////////////////////
-
+	
 	// unuse program
 	glUseProgram(0);
-
+	 
 	SwapBuffers(ghDC);
 	animationTime += 0.05f;
 }
