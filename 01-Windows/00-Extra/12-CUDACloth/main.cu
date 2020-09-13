@@ -70,8 +70,7 @@ GLuint vbo_norm;
 GLuint vbo_gpu[6];
 GLuint vbo_index;
 GLuint texCloths[2];
-float animationTime = 0.0f;
-bool bOnGPU = true;
+bool bOnGPU = false;
 bool bWind = false;
 cudaError_t error;
 bool bAnimation = true;
@@ -146,6 +145,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 	// function declarations
 	int initialize(void);
 	void display(void);
+	void ToggleFullScreen(void);
 
 	// variables 
 	bool bDone = false;
@@ -229,6 +229,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 	ShowWindow(hwnd, iCmdShow);
 	SetForegroundWindow(hwnd);
 	SetFocus(hwnd);
+	ToggleFullScreen();
 
 	// Game Loop 
 	while (bDone == false)
@@ -900,13 +901,14 @@ void display(void)
 	void launchCPUKernel(unsigned int, unsigned int, float3);
 	void RenderText(std::string, mat4, GLfloat, GLfloat, GLfloat, vec3);
 
+	LARGE_INTEGER start, end, elapsed;
+	LARGE_INTEGER freq;
+
+	QueryPerformanceFrequency(&freq);
+	QueryPerformanceCounter(&start);
+
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	// render text
-	RenderText(bOnGPU?"GPU":"CPU", 
-		ortho(0.0f, 1000.0f, 0.0f, 1000.0f*((float)gHeight/(float)gWidth), -1.0f, 1.0f),
-		0.0f, 0.0f, 0.15f,
-		bOnGPU?vec3(0.0f, 1.0f, 0.0f):vec3(1.0f));
 
 	// use shader program
 	glUseProgram(gShaderProgramObject);
@@ -1112,9 +1114,27 @@ void display(void)
 	
 	// unuse program
 	glUseProgram(0);
+
+	QueryPerformanceCounter(&end);
+	elapsed.QuadPart = end.QuadPart - start.QuadPart;
+
+	elapsed.QuadPart *= 1000;
+	elapsed.QuadPart /= freq.QuadPart;
+
+	// render text
+	RenderText(bOnGPU?"Computataion: GPU":"CPU", 
+		ortho(0.0f, 1000.0f, 0.0f, 1000.0f*((float)gHeight/(float)gWidth), -1.0f, 1.0f),
+		5.0f, 545.0f, 0.1f,
+		bOnGPU?vec3(0.0f, 1.0f, 0.0f):vec3(1.0f));
+
+	char msg[100];
+	sprintf(msg, "Frame time: %lld ms", elapsed.QuadPart);
+	RenderText(msg, 
+		ortho(0.0f, 1000.0f, 0.0f, 1000.0f*((float)gHeight/(float)gWidth), -1.0f, 1.0f),
+		5.0f, 520.0f, 0.1f,
+		bOnGPU?vec3(0.0f, 1.0f, 0.0f):vec3(1.0f));
 	 
 	SwapBuffers(ghDC);
-	animationTime += 0.05f;
 }
 
 void uninitialize(void)
@@ -1400,8 +1420,6 @@ void launchCPUKernel(unsigned int width, unsigned int height, float3 wind)
 		pvel1 = pvel2;
 		pvel2 = tmp;
 	}
-
-	fprintf(gpFile, "\nCalculating normals!");
 
 	// normals
 	float3 *norm = new float3[gMeshTotal];
@@ -1777,11 +1795,10 @@ void GetPresetData(vec4 *pos)
 		{
 			float fi = (float)i / (float)gMeshWidth;
 
-			
-			vel[n] = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
-			
 			switch(gState)
 			{
+				
+				vel[n] = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
 				case CLOTH_CURTAIN:
 					pos[n] = vec4((fi - 0.5f) * (float)gMeshWidth,
 						20.0f,
@@ -1801,6 +1818,8 @@ void GetPresetData(vec4 *pos)
 						1.0);
 				break;
 			}
+
+			::pos[n] = make_float4(pos[n][0], pos[n][1], pos[n][2], pos[n][3]);
 
 			n++;
 		}

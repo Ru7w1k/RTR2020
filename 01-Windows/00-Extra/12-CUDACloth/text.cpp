@@ -217,7 +217,7 @@ void InitFont(void)
 	if (FT_Init_FreeType(&ft))
 		MessageBox(NULL, TEXT("ERROR::FREETYPE: Could Not init FreeType Library"), TEXT("ERROR"), MB_OK);
 	FT_Face face;
-	if (FT_New_Face(ft, "C:\\Windows\\Fonts\\impact.ttf", 0, &face))
+	if (FT_New_Face(ft, "C:\\Windows\\WinSxS\\amd64_microsoft-windows-font-truetype-consolas_31bf3856ad364e35_10.0.19041.1_none_1fe0609844af8bce\\consola.ttf", 0, &face))
 		MessageBox(NULL, TEXT("ERROR::FREETYPE: Failed to load font"), TEXT("ERROR"), MB_OK);
 	FT_Set_Pixel_Sizes(face, 0, 175);
 
@@ -254,7 +254,7 @@ void InitFont(void)
 			texture,
 			vmath::ivec2(face->glyph->bitmap.width, face->glyph->bitmap.rows),
 			vmath::ivec2(face->glyph->bitmap_left, face->glyph->bitmap_top),
-			face->glyph->advance.x
+			(GLuint)face->glyph->advance.x
 		};
 		Characters.insert(std::pair<GLchar, Character>(c, character));
 	}
