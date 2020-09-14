@@ -35,12 +35,14 @@ enum {
 #define CLOTH_CURTAIN 	1
 #define CLOTH_TABLE 	2
 #define CLOTH_SPHERES 	3
+#define CLOTH_SNOWMAN	4
 
 // Global Variables
 const int gMeshWidth = 6 * 8;
 const int gMeshHeight = 6 * 8;
 const int gMeshTotal = gMeshWidth * gMeshHeight;
 int gState = CLOTH_CURTAIN;
+int gScene = 0;
 
 int gWidth;
 int gHeight;
@@ -72,6 +74,7 @@ GLuint vbo_index;
 GLuint texCloths[2];
 bool bOnGPU = false;
 bool bWind = false;
+bool bTex1 = false;
 cudaError_t error;
 bool bAnimation = true;
 GLuint mvpUniform;
@@ -345,6 +348,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 			gState = CLOTH_TABLE;
 			reset();
 			break;
+		case '4':
+			gState = CLOTH_SNOWMAN;
+			reset();
+			break;
 
 		case 'A':
 		case 'a':
@@ -354,6 +361,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 			else {
 				bAnimation = TRUE;
 			}
+			break;
+		case 'T':
+		case 't':
+			bTex1 = !bTex1;
+			break;
+
+		case 'Q':
+		case 'q':
+			gScene++;
 			break;
 		}
 
@@ -893,247 +909,95 @@ void resize(int width, int height)
 	perspectiveProjectionMatrix = perspective(45.0, (float)width / (float)height, 0.1f, 100.0f);
 }
 
-
 void display(void)
 {
 	void uninitialize(void);
-	void launchCUDAKernel(float4 *, float4 *, float4 *, float4 *, unsigned int, unsigned int, float3 *, float3, float);
-	void launchCPUKernel(unsigned int, unsigned int, float3);
 	void RenderText(std::string, mat4, GLfloat, GLfloat, GLfloat, vec3);
+	void DrawCloth(void);
 
-	LARGE_INTEGER start, end, elapsed;
-	LARGE_INTEGER freq;
-
-	QueryPerformanceFrequency(&freq);
-	QueryPerformanceCounter(&start);
+	static float alpha = 0.0f;
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-
-	// use shader program
-	glUseProgram(gShaderProgramObject);
-
-	mat4 mMatrix = mat4::identity();
-	mMatrix *= rotate(0.0f, 100.0f*sinf(cAngle), 0.0f);
-
-	mat4 vMatrix = mat4::identity();
-	vMatrix *= lookat(
-		vec3(0.0f, 0.0f, 80.0f),
-		vec3(0.0f, 0.0f, 0.0f),
-		vec3(0.0f, 1.0f, 0.0f));
-
-	glUniformMatrix4fv(glGetUniformLocation(gShaderProgramObject, "u_m_matrix"), 1, GL_FALSE, mMatrix);
-	glUniformMatrix4fv(glGetUniformLocation(gShaderProgramObject, "u_v_matrix"), 1, GL_FALSE, vMatrix);
-	glUniformMatrix4fv(glGetUniformLocation(gShaderProgramObject, "u_p_matrix"), 1, GL_FALSE, perspectiveProjectionMatrix);
-
-	float3 wind = make_float3(0.0f, 0.0f, 0.0f);
-	if (bWind) wind = make_float3(0.0f, 0.0f, 8.0f);
-
-	glBindVertexArray(vao);
-
-	if (bOnGPU)
+	mat4 renderOrtho = ortho(0.0f, 1000.0f, 0.0f, 1000.0f*((float)gHeight/(float)gWidth), -1.0f, 1.0f);
+	
+	switch (gScene)
 	{
-		// 1. map with the resource
-		error = cudaGraphicsMapResources(1, &graphicsResource[0], 0);
-		if (error != cudaSuccess)
-		{
-			fprintf(gpFile, "cudaGraphicsMapResource 0 failed..\n");
+		case 0:
+			RenderText("AstroMediComp's", 
+				renderOrtho,
+				390.0f, 310.0f, 0.6f,
+				vec3(1.0f)*alpha);
+			RenderText("DomainShader Group", 
+				renderOrtho,
+				350.0f, 270.0f, 0.7f,
+				vec3(1.0f)*alpha);
+			RenderText("Presents", 
+				renderOrtho,
+				435.0f, 230.0f, 0.6f,
+				vec3(1.0f)*alpha);
+			break;
+
+		case 1:
+			RenderText("Cloth Rendering", 
+				renderOrtho,
+				370.0f, 270.0f, 0.7f,
+				vec3(1.0f)*alpha);
+			break;
+
+		case 2:
+			DrawCloth();
+			break;
+		
+		case 3:
+			RenderText("Guided by", 
+				renderOrtho,
+				430.0f, 310.0f, 0.6f,
+				vec3(1.0f)*alpha);
+			RenderText("Dr. Vijay D. Gokhale Sir", 
+				renderOrtho,
+				320.0f, 270.0f, 0.7f,
+				vec3(1.0f)*alpha);
+			break;
+
+		case 4:
+			RenderText("Thank You!", 
+				renderOrtho,
+				420.0f, 270.0f, 0.7f,
+				vec3(1.0f)*alpha);
+			break;
+
+		case 5:
 			uninitialize();
 			DestroyWindow(ghWnd);
-		}
-
-		error = cudaGraphicsMapResources(1, &graphicsResource[1], 0);
-		if (error != cudaSuccess)
-		{
-			fprintf(gpFile, "cudaGraphicsMapResource 1 failed..\n");
-			uninitialize();
-			DestroyWindow(ghWnd);
-		}
-
-		error = cudaGraphicsMapResources(1, &graphicsResource[2], 0);
-		if (error != cudaSuccess)
-		{
-			fprintf(gpFile, "cudaGraphicsMapResource 2 failed..\n");
-			uninitialize();
-			DestroyWindow(ghWnd);
-		}
-
-		error = cudaGraphicsMapResources(1, &graphicsResource[3], 0);
-		if (error != cudaSuccess)
-		{
-			fprintf(gpFile, "cudaGraphicsMapResource 3 failed..\n");
-			uninitialize();
-			DestroyWindow(ghWnd);
-		}
-
-		error = cudaGraphicsMapResources(1, &graphicsResource[4], 0);
-		if (error != cudaSuccess)
-		{
-			fprintf(gpFile, "cudaGraphicsMapResource 4 failed..\n");
-			uninitialize();
-			DestroyWindow(ghWnd);
-		}
-
-		// 2. get pointer to mapped resource
-		float4 *ppos1 = NULL;
-		float4 *ppos2 = NULL;
-		float4 *pvel1 = NULL;
-		float4 *pvel2 = NULL;
-		float3 *norm = NULL;
-
-		size_t byteCount;
-		error = cudaGraphicsResourceGetMappedPointer((void **)&ppos1, &byteCount, graphicsResource[0]);
-		if (error != cudaSuccess)
-		{
-			fprintf(gpFile, "cudaGraphicsResourceGetMappedPointer ppos1 failed..\n");
-			uninitialize();
-			DestroyWindow(ghWnd);
-		}
-
-		error = cudaGraphicsResourceGetMappedPointer((void **)&ppos2, &byteCount, graphicsResource[1]);
-		if (error != cudaSuccess)
-		{
-			fprintf(gpFile, "cudaGraphicsResourceGetMappedPointer ppos2 failed..\n");
-			uninitialize();
-			DestroyWindow(ghWnd);
-		}
-
-		error = cudaGraphicsResourceGetMappedPointer((void **)&pvel1, &byteCount, graphicsResource[2]);
-		if (error != cudaSuccess)
-		{
-			fprintf(gpFile, "cudaGraphicsResourceGetMappedPointer pvel1 failed..\n");
-			uninitialize();
-			DestroyWindow(ghWnd);
-		}
-
-		error = cudaGraphicsResourceGetMappedPointer((void **)&pvel2, &byteCount, graphicsResource[3]);
-		if (error != cudaSuccess)
-		{
-			fprintf(gpFile, "cudaGraphicsResourceGetMappedPointer pvel2 failed..\n");
-			uninitialize();
-			DestroyWindow(ghWnd);
-		}
-
-		error = cudaGraphicsResourceGetMappedPointer((void **)&norm, &byteCount, graphicsResource[4]);
-		if (error != cudaSuccess)
-		{
-			fprintf(gpFile, "cudaGraphicsResourceGetMappedPointer norm failed..\n");
-			uninitialize();
-			DestroyWindow(ghWnd);
-		}
-
-
-		// 3. launch the CUDA kernel
-		static float xOffset = 0.0f;
-		launchCUDAKernel(ppos1, ppos2, pvel1, pvel2, gMeshWidth, gMeshHeight, norm, wind, xOffset);
-		xOffset += 0.01f;
-
-		// 4. unmap the resource
-		error = cudaGraphicsUnmapResources(1, &graphicsResource[0], 0);
-		if (error != cudaSuccess)
-		{
-			fprintf(gpFile, "cudaGraphicsUnmapResources failed..\n");
-			uninitialize();
-			DestroyWindow(ghWnd);
-		}
-
-		error = cudaGraphicsUnmapResources(1, &graphicsResource[1], 0);
-		if (error != cudaSuccess)
-		{
-			fprintf(gpFile, "cudaGraphicsUnmapResources failed..\n");
-			uninitialize();
-			DestroyWindow(ghWnd);
-		}
-
-		error = cudaGraphicsUnmapResources(1, &graphicsResource[2], 0);
-		if (error != cudaSuccess)
-		{
-			fprintf(gpFile, "cudaGraphicsUnmapResources failed..\n");
-			uninitialize();
-			DestroyWindow(ghWnd);
-		}
-
-		error = cudaGraphicsUnmapResources(1, &graphicsResource[3], 0);
-		if (error != cudaSuccess)
-		{
-			fprintf(gpFile, "cudaGraphicsUnmapResources failed..\n");
-			uninitialize();
-			DestroyWindow(ghWnd);
-		}
-
-		error = cudaGraphicsUnmapResources(1, &graphicsResource[4], 0);
-		if (error != cudaSuccess)
-		{
-			fprintf(gpFile, "cudaGraphicsUnmapResources failed..\n");
-			uninitialize();
-			DestroyWindow(ghWnd);
-		}
-
-	}
-	else
-	{
-		launchCPUKernel(gMeshWidth, gMeshHeight, wind);
-
-		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE * sizeof(float), pos, GL_DYNAMIC_DRAW);
+			break;
 	}
 
-	// bind to the respective buffer
-	if (bOnGPU) glBindBuffer(GL_ARRAY_BUFFER, vbo_gpu[0]);
-	else glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	// fade-in fade-out text scenes
+	static int fc = 0;
+	if (gScene != 2)
+	{
+		if (fc <= 200) 
+		{
+			alpha += 0.01f;
+		}
+		else if (fc <= 350)
+		{
+			alpha = 1.0f;
+		}
+		else if (fc <= 450)
+		{
+			alpha -= 0.01f;
+		}
+		else
+		{
+			gScene++;
+			fc = 0;
+			alpha = 0.0f;
+		}
+		fc++;
+	}
 
-	glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 4, GL_FLOAT, GL_FALSE, 0, NULL);
-	glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
-
-	if (bOnGPU) glBindBuffer(GL_ARRAY_BUFFER, vbo_gpu[4]);
-	else glBindBuffer(GL_ARRAY_BUFFER, vbo_norm);
-
-	glVertexAttribPointer(AMC_ATTRIBUTE_NORMAL, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-	glEnableVertexAttribArray(AMC_ATTRIBUTE_NORMAL);
-
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, texCloths[0]);
-
-	int lines = (gMeshWidth * (gMeshHeight - 1)) + gMeshWidth;
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_index);
-
-	// draw now!
-	
-	// back side
-	glUniform1f(glGetUniformLocation(gShaderProgramObject, "front"), 1.0f);
-	glCullFace(GL_FRONT);
-	glDrawElements(GL_TRIANGLE_STRIP, lines * 2, GL_UNSIGNED_INT, NULL);
-
-	// front side
-	glUniform1f(glGetUniformLocation(gShaderProgramObject, "front"), -1.0f);
-	glCullFace(GL_BACK);
-	glDrawElements(GL_TRIANGLE_STRIP, lines * 2, GL_UNSIGNED_INT, NULL);
-	glBindVertexArray(0);
-	
-	//////////////////////////////////////////////////////////////////////////////////////////
-	
-	// unuse program
-	glUseProgram(0);
-
-	QueryPerformanceCounter(&end);
-	elapsed.QuadPart = end.QuadPart - start.QuadPart;
-
-	elapsed.QuadPart *= 1000;
-	elapsed.QuadPart /= freq.QuadPart;
-
-	// render text
-	RenderText(bOnGPU?"Computataion: GPU":"CPU", 
-		ortho(0.0f, 1000.0f, 0.0f, 1000.0f*((float)gHeight/(float)gWidth), -1.0f, 1.0f),
-		5.0f, 545.0f, 0.1f,
-		bOnGPU?vec3(0.0f, 1.0f, 0.0f):vec3(1.0f));
-
-	char msg[100];
-	sprintf(msg, "Frame time: %lld ms", elapsed.QuadPart);
-	RenderText(msg, 
-		ortho(0.0f, 1000.0f, 0.0f, 1000.0f*((float)gHeight/(float)gWidth), -1.0f, 1.0f),
-		5.0f, 520.0f, 0.1f,
-		bOnGPU?vec3(0.0f, 1.0f, 0.0f):vec3(1.0f));
-	 
 	SwapBuffers(ghDC);
 }
 
@@ -1258,7 +1122,7 @@ void launchCPUKernel(unsigned int width, unsigned int height, float3 wind)
 	float4 *pvel1 = vel;
 	float4 *pvel2 = vel1;
 
-	for (int count = 0; count < 1000; count++)
+	for (int count = 0; count < 800; count++)
 	{
 		for (unsigned int x = 0; x < width; x++)
 		{
@@ -1389,6 +1253,14 @@ void launchCPUKernel(unsigned int width, unsigned int height, float3 wind)
 					op = p - make_float3(10.0f, -4.0f, 10.0f);
 					lop = length(op);
 					if (lop < 5.0)
+					{
+						s.y = 0.0f;
+						v.y = 0.0f;
+					}
+
+					op = p - make_float3(0.0f, -40.0f, 0.0f);
+					lop = length(op);
+					if (lop < 20.0)
 					{
 						s.y = 0.0f;
 						v.y = 0.0f;
@@ -1668,6 +1540,14 @@ __global__ void cloth_kernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *v
 			s.y = 0.0f;
 			v.y = 0.0f;
 		}
+
+		op = p - make_float3(0.0f, -40.0f, 0.0f);
+		lop = length(op);
+		if (lop < 20.0)
+		{
+			s.y = 0.0f;
+			v.y = 0.0f;
+		}
 	}
 
 	// rectangle
@@ -1680,6 +1560,25 @@ __global__ void cloth_kernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *v
 		}
 	}
 
+	// // snowman
+	// if (gState == CLOTH_SNOWMAN)
+	// {
+	// 	float3 op = p - make_float3(0.0f, -5.0f, -1.0f);
+	// 	float lop = length(op);
+	// 	if (lop < 10.0)
+	// 	{
+	// 		s.y = 0.0f;
+	// 		v.y = 0.0f;
+	// 	}
+
+	// 	op = p - make_float3(0.0f, -30.0f, -1.0f);
+	// 	lop = length(op);
+	// 	if (lop < 15.0)
+	// 	{
+	// 		s.y = 0.0f;
+	// 		v.y = 0.0f;
+	// 	}
+	// }
 
 
 	float3 pos = p + s;
@@ -1751,7 +1650,7 @@ void launchCUDAKernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *vel2, un
 	dim3 block(16, 16, 1);
 	dim3 grid(meshWidth / block.x, meshHeight / block.y, 1);
 
-	for (int i = 0; i < 500; i++)
+	for (int i = 0; i < 400; i++)
 	{
 		cloth_kernel << <grid, block >> > (pos1, pos2, vel1, vel2, meshWidth, meshHeight, wind, gState);
 		//cudaDeviceSynchronize();
@@ -1794,11 +1693,9 @@ void GetPresetData(vec4 *pos)
 		for (i = 0; i < gMeshWidth; i++)
 		{
 			float fi = (float)i / (float)gMeshWidth;
-
+			vel[n] = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
 			switch(gState)
 			{
-				
-				vel[n] = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
 				case CLOTH_CURTAIN:
 					pos[n] = vec4((fi - 0.5f) * (float)gMeshWidth,
 						20.0f,
@@ -1812,6 +1709,7 @@ void GetPresetData(vec4 *pos)
 				
 				case CLOTH_SPHERES:
 				case CLOTH_TABLE:
+				case CLOTH_SNOWMAN:
 					pos[n] = vec4((fi - 0.5f) * (float)gMeshWidth,
 						20.0f,
 						(fj - 0.5f) * (float)gMeshHeight,
@@ -1825,3 +1723,257 @@ void GetPresetData(vec4 *pos)
 		}
 	}
 }
+
+void DrawCloth(void)
+{
+	// function declarations
+	void launchCUDAKernel(float4 *, float4 *, float4 *, float4 *, unsigned int, unsigned int, float3 *, float3, float);
+	void launchCPUKernel(unsigned int, unsigned int, float3);
+	void RenderText(std::string, mat4, GLfloat, GLfloat, GLfloat, vec3);
+	mat4 renderOrtho = ortho(0.0f, 1000.0f, 0.0f, 1000.0f*((float)gHeight/(float)gWidth), -1.0f, 1.0f);
+
+	// variables
+	LARGE_INTEGER start, end, elapsed;
+	LARGE_INTEGER freq;
+
+	QueryPerformanceFrequency(&freq);
+	QueryPerformanceCounter(&start);
+
+	// use shader program
+	glUseProgram(gShaderProgramObject);
+		
+	mat4 mMatrix = mat4::identity();
+	mMatrix *= rotate(0.0f, 100.0f*sinf(cAngle), 0.0f);
+
+	mat4 vMatrix = mat4::identity();
+	vMatrix *= lookat(
+		vec3(0.0f, 0.0f, 80.0f),
+		vec3(0.0f, 0.0f, 0.0f),
+		vec3(0.0f, 1.0f, 0.0f));
+
+	glUniformMatrix4fv(glGetUniformLocation(gShaderProgramObject, "u_m_matrix"), 1, GL_FALSE, mMatrix);
+	glUniformMatrix4fv(glGetUniformLocation(gShaderProgramObject, "u_v_matrix"), 1, GL_FALSE, vMatrix);
+	glUniformMatrix4fv(glGetUniformLocation(gShaderProgramObject, "u_p_matrix"), 1, GL_FALSE, perspectiveProjectionMatrix);
+
+	float3 wind = make_float3(0.0f, 0.0f, 0.0f);
+	if (bWind) wind = make_float3(0.0f, 0.0f, 8.0f);
+
+	glBindVertexArray(vao);
+
+	if (bOnGPU)
+	{
+		// 1. map with the resource
+		error = cudaGraphicsMapResources(1, &graphicsResource[0], 0);
+		if (error != cudaSuccess)
+		{
+			fprintf(gpFile, "cudaGraphicsMapResource 0 failed..\n");
+			uninitialize();
+			DestroyWindow(ghWnd);
+		}
+
+		error = cudaGraphicsMapResources(1, &graphicsResource[1], 0);
+		if (error != cudaSuccess)
+		{
+			fprintf(gpFile, "cudaGraphicsMapResource 1 failed..\n");
+			uninitialize();
+			DestroyWindow(ghWnd);
+		}
+
+		error = cudaGraphicsMapResources(1, &graphicsResource[2], 0);
+		if (error != cudaSuccess)
+		{
+			fprintf(gpFile, "cudaGraphicsMapResource 2 failed..\n");
+			uninitialize();
+			DestroyWindow(ghWnd);
+		}
+
+		error = cudaGraphicsMapResources(1, &graphicsResource[3], 0);
+		if (error != cudaSuccess)
+		{
+			fprintf(gpFile, "cudaGraphicsMapResource 3 failed..\n");
+			uninitialize();
+			DestroyWindow(ghWnd);
+		}
+
+		error = cudaGraphicsMapResources(1, &graphicsResource[4], 0);
+		if (error != cudaSuccess)
+		{
+			fprintf(gpFile, "cudaGraphicsMapResource 4 failed..\n");
+			uninitialize();
+			DestroyWindow(ghWnd);
+		}
+
+		// 2. get pointer to mapped resource
+		float4 *ppos1 = NULL;
+		float4 *ppos2 = NULL;
+		float4 *pvel1 = NULL;
+		float4 *pvel2 = NULL;
+		float3 *norm = NULL;
+
+		size_t byteCount;
+		error = cudaGraphicsResourceGetMappedPointer((void **)&ppos1, &byteCount, graphicsResource[0]);
+		if (error != cudaSuccess)
+		{
+			fprintf(gpFile, "cudaGraphicsResourceGetMappedPointer ppos1 failed..\n");
+			uninitialize();
+			DestroyWindow(ghWnd);
+		}
+
+		error = cudaGraphicsResourceGetMappedPointer((void **)&ppos2, &byteCount, graphicsResource[1]);
+		if (error != cudaSuccess)
+		{
+			fprintf(gpFile, "cudaGraphicsResourceGetMappedPointer ppos2 failed..\n");
+			uninitialize();
+			DestroyWindow(ghWnd);
+		}
+
+		error = cudaGraphicsResourceGetMappedPointer((void **)&pvel1, &byteCount, graphicsResource[2]);
+		if (error != cudaSuccess)
+		{
+			fprintf(gpFile, "cudaGraphicsResourceGetMappedPointer pvel1 failed..\n");
+			uninitialize();
+			DestroyWindow(ghWnd);
+		}
+
+		error = cudaGraphicsResourceGetMappedPointer((void **)&pvel2, &byteCount, graphicsResource[3]);
+		if (error != cudaSuccess)
+		{
+			fprintf(gpFile, "cudaGraphicsResourceGetMappedPointer pvel2 failed..\n");
+			uninitialize();
+			DestroyWindow(ghWnd);
+		}
+
+		error = cudaGraphicsResourceGetMappedPointer((void **)&norm, &byteCount, graphicsResource[4]);
+		if (error != cudaSuccess)
+		{
+			fprintf(gpFile, "cudaGraphicsResourceGetMappedPointer norm failed..\n");
+			uninitialize();
+			DestroyWindow(ghWnd);
+		}
+
+
+		// 3. launch the CUDA kernel
+		static float xOffset = 0.0f;
+		launchCUDAKernel(ppos1, ppos2, pvel1, pvel2, gMeshWidth, gMeshHeight, norm, wind, xOffset);
+		xOffset += 0.01f;
+
+		// 4. unmap the resource
+		error = cudaGraphicsUnmapResources(1, &graphicsResource[0], 0);
+		if (error != cudaSuccess)
+		{
+			fprintf(gpFile, "cudaGraphicsUnmapResources failed..\n");
+			uninitialize();
+			DestroyWindow(ghWnd);
+		}
+
+		error = cudaGraphicsUnmapResources(1, &graphicsResource[1], 0);
+		if (error != cudaSuccess)
+		{
+			fprintf(gpFile, "cudaGraphicsUnmapResources failed..\n");
+			uninitialize();
+			DestroyWindow(ghWnd);
+		}
+
+		error = cudaGraphicsUnmapResources(1, &graphicsResource[2], 0);
+		if (error != cudaSuccess)
+		{
+			fprintf(gpFile, "cudaGraphicsUnmapResources failed..\n");
+			uninitialize();
+			DestroyWindow(ghWnd);
+		}
+
+		error = cudaGraphicsUnmapResources(1, &graphicsResource[3], 0);
+		if (error != cudaSuccess)
+		{
+			fprintf(gpFile, "cudaGraphicsUnmapResources failed..\n");
+			uninitialize();
+			DestroyWindow(ghWnd);
+		}
+
+		error = cudaGraphicsUnmapResources(1, &graphicsResource[4], 0);
+		if (error != cudaSuccess)
+		{
+			fprintf(gpFile, "cudaGraphicsUnmapResources failed..\n");
+			uninitialize();
+			DestroyWindow(ghWnd);
+		}
+
+	}
+	else
+	{
+		launchCPUKernel(gMeshWidth, gMeshHeight, wind);
+
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glBufferData(GL_ARRAY_BUFFER, MY_ARRAY_SIZE * sizeof(float), pos, GL_DYNAMIC_DRAW);
+	}
+
+	// bind to the respective buffer
+	if (bOnGPU) glBindBuffer(GL_ARRAY_BUFFER, vbo_gpu[0]);
+	else glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
+	glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 4, GL_FLOAT, GL_FALSE, 0, NULL);
+	glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
+
+	if (bOnGPU) glBindBuffer(GL_ARRAY_BUFFER, vbo_gpu[4]);
+	else glBindBuffer(GL_ARRAY_BUFFER, vbo_norm);
+
+	glVertexAttribPointer(AMC_ATTRIBUTE_NORMAL, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+	glEnableVertexAttribArray(AMC_ATTRIBUTE_NORMAL);
+
+	glActiveTexture(GL_TEXTURE0);
+	if (bTex1) glBindTexture(GL_TEXTURE_2D, texCloths[0]);
+	else glBindTexture(GL_TEXTURE_2D, texCloths[1]);
+
+	int lines = (gMeshWidth * (gMeshHeight - 1)) + gMeshWidth;
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_index);
+
+	// draw now!
+	
+	// back side
+	glUniform1f(glGetUniformLocation(gShaderProgramObject, "front"), 1.0f);
+	glCullFace(GL_FRONT);
+	glDrawElements(GL_TRIANGLE_STRIP, lines * 2, GL_UNSIGNED_INT, NULL);
+
+	// front side
+	glUniform1f(glGetUniformLocation(gShaderProgramObject, "front"), -1.0f);
+	glCullFace(GL_BACK);
+	glDrawElements(GL_TRIANGLE_STRIP, lines * 2, GL_UNSIGNED_INT, NULL);
+	glBindVertexArray(0);
+	
+	//////////////////////////////////////////////////////////////////////////////////////////
+	
+	// unuse program
+	glUseProgram(0);
+
+	QueryPerformanceCounter(&end);
+	elapsed.QuadPart = end.QuadPart - start.QuadPart;
+
+	elapsed.QuadPart *= 1000;
+	elapsed.QuadPart /= freq.QuadPart;
+
+	// render text
+	RenderText(bOnGPU?"Computation: GPU":"Computation: CPU", 
+		renderOrtho,
+		5.0f, 540.0f, 0.5f,
+		bOnGPU?vec3(0.0f, 1.0f, 0.0f):vec3(1.0f, 0.0f, 0.0f));
+
+	char msg[100];
+	sprintf(msg, "Frame time:  %lld ms", elapsed.QuadPart);
+	RenderText(msg, 
+		renderOrtho,
+		5.0f, 520.0f, 0.5f,
+		bOnGPU?vec3(0.0f, 1.0f, 0.0f):vec3(1.0f, 0.0f, 0.0f));
+
+	sprintf(msg, "Frames/Sec:  %3.2f", 1000.0f/elapsed.QuadPart);
+	RenderText(msg, 
+		renderOrtho,
+		5.0f, 500.0f, 0.5f,
+		bOnGPU?vec3(0.0f, 1.0f, 0.0f):vec3(1.0f, 0.0f, 0.0f));
+
+	RenderText(bWind? "Wind:        ON" : "Wind:        OFF", 
+		renderOrtho,
+		5.0f, 480.0f, 0.5f,
+		bWind? vec3(0.0f, 1.0f, 0.0f) : vec3(1.0f, 0.0f, 0.0f));
+	
+}
+

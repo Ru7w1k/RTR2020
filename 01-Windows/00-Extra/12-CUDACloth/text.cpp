@@ -219,7 +219,7 @@ void InitFont(void)
 	FT_Face face;
 	if (FT_New_Face(ft, "C:\\Windows\\WinSxS\\amd64_microsoft-windows-font-truetype-consolas_31bf3856ad364e35_10.0.19041.1_none_1fe0609844af8bce\\consola.ttf", 0, &face))
 		MessageBox(NULL, TEXT("ERROR::FREETYPE: Failed to load font"), TEXT("ERROR"), MB_OK);
-	FT_Set_Pixel_Sizes(face, 0, 175);
+	FT_Set_Pixel_Sizes(face, 0, 40);
 
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
