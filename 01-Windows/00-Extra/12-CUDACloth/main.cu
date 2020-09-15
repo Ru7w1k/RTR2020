@@ -15,7 +15,9 @@
 // Linker Options
 #pragma comment(lib, "glew32.lib")
 #pragma comment(lib, "opengl32.lib")
-#pragma comment(lib, "cudart.lib")
+#pragma comment(lib, "winmm.lib")  // for PlaySound()
+#pragma comment(lib, "cudart.lib") // for CUDA
+
 
 // Defines
 #define WIN_WIDTH  800
@@ -251,10 +253,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 		}
 		else
 		{
-			if (gbActiveWindow == true && bAnimation)
+			if (gbActiveWindow == true)
 			{
+				display();
 			}
-			display();
 		}
 	}
 
@@ -345,6 +347,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 			break;
 
 		case '3':
+			bTex1 = true;
 			gState = CLOTH_TABLE;
 			reset();
 			break;
@@ -892,6 +895,11 @@ int initialize(void)
 	// warm-up call to resize
 	resize(WIN_WIDTH, WIN_HEIGHT);
 
+	// play backgroud theme song
+	PlaySound(MAKEINTRESOURCE(IDWAV_THEME), // ID of WAVE resource
+		GetModuleHandle(NULL), 				// handle of this module, which contains the resource
+		SND_RESOURCE | SND_ASYNC);			// ID is of type resource | play async (i.e. non-blocking)
+
 	return(0);
 }
 
@@ -906,7 +914,7 @@ void resize(int width, int height)
 	gHeight = height;	
 
 	glViewport(0, 0, (GLsizei)width, (GLsizei)height);
-	perspectiveProjectionMatrix = perspective(45.0, (float)width / (float)height, 0.1f, 100.0f);
+	perspectiveProjectionMatrix = perspective(45.0, (float)width / (float)height, 0.1f, 200.0f);
 }
 
 void display(void)
@@ -939,9 +947,9 @@ void display(void)
 			break;
 
 		case 1:
-			RenderText("Cloth Rendering", 
+			RenderText("Cloth Rendering using CUDA", 
 				renderOrtho,
-				370.0f, 270.0f, 0.7f,
+				290.0f, 270.0f, 0.7f,
 				vec3(1.0f)*alpha);
 			break;
 
@@ -1652,14 +1660,11 @@ void launchCUDAKernel(float4 *pos1, float4 *pos2, float4 *vel1, float4 *vel2, un
 
 	for (int i = 0; i < 400; i++)
 	{
-		cloth_kernel << <grid, block >> > (pos1, pos2, vel1, vel2, meshWidth, meshHeight, wind, gState);
-		//cudaDeviceSynchronize();
-		cloth_kernel << <grid, block >> > (pos2, pos1, vel2, vel1, meshWidth, meshHeight, wind, gState);
-		//cudaDeviceSynchronize();
+		cloth_kernel <<<grid, block >>> (pos1, pos2, vel1, vel2, meshWidth, meshHeight, wind, gState);
+		cloth_kernel <<<grid, block >>> (pos2, pos1, vel2, vel1, meshWidth, meshHeight, wind, gState);
 
 	}
-	//cudaDeviceSynchronize();
-	cloth_normals << <grid, block >> > (pos1, norm, meshWidth, meshHeight);
+	cloth_normals <<<grid, block >>> (pos1, norm, meshWidth, meshHeight);
 }
 
 void reset()
@@ -1952,25 +1957,25 @@ void DrawCloth(void)
 	elapsed.QuadPart /= freq.QuadPart;
 
 	// render text
-	RenderText(bOnGPU?"Computation: GPU":"Computation: CPU", 
+	RenderText(bOnGPU?"Computation : GPU":"Computation : CPU", 
 		renderOrtho,
 		5.0f, 540.0f, 0.5f,
 		bOnGPU?vec3(0.0f, 1.0f, 0.0f):vec3(1.0f, 0.0f, 0.0f));
 
 	char msg[100];
-	sprintf(msg, "Frame time:  %lld ms", elapsed.QuadPart);
+	sprintf(msg, "Frame time  : %lld ms", elapsed.QuadPart);
 	RenderText(msg, 
 		renderOrtho,
 		5.0f, 520.0f, 0.5f,
 		bOnGPU?vec3(0.0f, 1.0f, 0.0f):vec3(1.0f, 0.0f, 0.0f));
 
-	sprintf(msg, "Frames/Sec:  %3.2f", 1000.0f/elapsed.QuadPart);
+	sprintf(msg, "Frames/Sec  : %3.2f", 1000.0f/elapsed.QuadPart);
 	RenderText(msg, 
 		renderOrtho,
 		5.0f, 500.0f, 0.5f,
 		bOnGPU?vec3(0.0f, 1.0f, 0.0f):vec3(1.0f, 0.0f, 0.0f));
 
-	RenderText(bWind? "Wind:        ON" : "Wind:        OFF", 
+	RenderText(bWind? "Wind        : ON" : "Wind        : OFF", 
 		renderOrtho,
 		5.0f, 480.0f, 0.5f,
 		bWind? vec3(0.0f, 1.0f, 0.0f) : vec3(1.0f, 0.0f, 0.0f));
