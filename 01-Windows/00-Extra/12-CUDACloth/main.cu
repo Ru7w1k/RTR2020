@@ -78,7 +78,6 @@ bool bOnGPU = false;
 bool bWind = false;
 bool bTex1 = false;
 cudaError_t error;
-bool bAnimation = true;
 GLuint mvpUniform;
 mat4 perspectiveProjectionMatrix;
 float cAngle = 0.0f;
@@ -179,12 +178,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 	wndclass.cbWndExtra = 0;
 	wndclass.lpfnWndProc = WndProc;
 	wndclass.hInstance = hInstance;
-	wndclass.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+	wndclass.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(RMC_ICON));
 	wndclass.hCursor = LoadCursor(NULL, IDC_ARROW);
 	wndclass.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
 	wndclass.lpszClassName = szClassName;
 	wndclass.lpszMenuName = NULL;
-	wndclass.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
+	wndclass.hIconSm = LoadIcon(hInstance, MAKEINTRESOURCE(RMC_ICON));
 
 	// register class
 	RegisterClassEx(&wndclass);
@@ -356,15 +355,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 			reset();
 			break;
 
-		case 'A':
-		case 'a':
-			if (bAnimation == TRUE) {
-				bAnimation = FALSE;
-			}
-			else {
-				bAnimation = TRUE;
-			}
-			break;
 		case 'T':
 		case 't':
 			bTex1 = !bTex1;

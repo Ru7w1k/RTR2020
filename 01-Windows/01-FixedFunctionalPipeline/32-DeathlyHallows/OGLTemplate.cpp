@@ -324,17 +324,21 @@ void display(void)
 	float s, a, b, c;
 
 	/* Radius Of Incircle */
-	a = sqrt(pow((-fLength - 0.0), 2.0) + pow(-fLength - fLength, 2.0));
-	b = sqrt(pow((fLength - (-fLength)), 2.0) + pow(-fLength - (-fLength), 2.0));
-	c = sqrt(pow((fLength - 0.0), 2.0) + pow(-fLength - fLength, 2.0));
+	a = sqrt(pow((fLength - (-fLength)), 2.0) + pow(-fLength - (-fLength), 2.0));
+	b = sqrt(pow((fLength - 0.0), 2.0) + pow(-fLength - fLength, 2.0));
+	c = sqrt(pow((-fLength - 0.0), 2.0) + pow(-fLength - fLength, 2.0));
 	s = (a + b + c) / 2.0;
 	fRadius = sqrt(s * (s - a) * (s - b) * (s - c)) / s;
+
+	GLfloat axbxcx = (a*0.0f) + (-fLength*b) + (fLength*c);
+	GLfloat aybycy = (a*fLength) + (-fLength*b) + (-fLength*c);
+	GLfloat abc = a + b + c;
 
 	/* Move MATRIX to the center of Incircle */
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 
-	glTranslatef(0.0f, -fLength + fRadius, -3.0f);
+	glTranslatef(axbxcx/abc, aybycy/abc, -3.0f);
 	/*  Resurrection Stone */
 	glBegin(GL_LINE_LOOP);
 	for (fAngle = 0.0f; fAngle < 2 * M_PI; fAngle += 0.01f)

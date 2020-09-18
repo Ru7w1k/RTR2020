@@ -89,8 +89,7 @@ void InitFont(void)
     void uninitialize(void);
 	BOOL loadTexture(GLuint *texture, TCHAR imageResourceID[]);
 
-	//Vertex shader//
-	//create
+	//Vertex shader
 	gVertexShaderObject = glCreateShader(GL_VERTEX_SHADER);
 	const GLchar *vertexShaderSourceCode =
 		"#version 450 core"\
@@ -137,10 +136,7 @@ void InitFont(void)
 	}
 
 	//Fragment shader
-	//createShader
-
 	gFragmentShaderObject = glCreateShader(GL_FRAGMENT_SHADER);
-
 	const GLchar *fragmentShaderSourceCode =
 		"#version 450 core"\
 		"\n"\
@@ -185,8 +181,6 @@ void InitFont(void)
 	}
 
 	//shader program
-	//create
-
 	gTextShaderProgram = glCreateProgram();
 
 	glAttachShader(gTextShaderProgram, gVertexShaderObject);
@@ -216,13 +210,13 @@ void InitFont(void)
 	FT_Library ft;
 	if (FT_Init_FreeType(&ft))
 		MessageBox(NULL, TEXT("ERROR::FREETYPE: Could Not init FreeType Library"), TEXT("ERROR"), MB_OK);
+
 	FT_Face face;
-	if (FT_New_Face(ft, "C:\\Windows\\WinSxS\\amd64_microsoft-windows-font-truetype-consolas_31bf3856ad364e35_10.0.19041.1_none_1fe0609844af8bce\\consola.ttf", 0, &face))
+	if (FT_New_Face(ft, "consola.ttf", 0, &face))
 		MessageBox(NULL, TEXT("ERROR::FREETYPE: Failed to load font"), TEXT("ERROR"), MB_OK);
+
 	FT_Set_Pixel_Sizes(face, 0, 40);
-
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-
 	for (GLubyte c = 0; c < 128; c++)
 	{
 		if (FT_Load_Char(face, c, FT_LOAD_RENDER))
