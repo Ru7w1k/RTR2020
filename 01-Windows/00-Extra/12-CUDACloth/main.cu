@@ -959,9 +959,45 @@ void display(void)
 			break;
 
 		case 4:
+			RenderText("HPP       : CUDA", 
+				renderOrtho,
+				50.0f, 500.0f, 0.6f,
+				vec3(1.0f)*alpha);
+			RenderText("Rendering : OpenGL", 
+				renderOrtho,
+				50.0f, 470.0f, 0.6f,
+				vec3(1.0f)*alpha);
+			RenderText("Reference:", 
+				renderOrtho,
+				50.0f, 400.0f, 0.6f,
+				vec3(1.0f)*alpha);
+			RenderText("1. CUDA by Example", 
+				renderOrtho,
+				70.0f, 360.0f, 0.6f,
+				vec3(1.0f)*alpha);
+			RenderText("- Jason Sanders, Edward Kandrot", 
+				renderOrtho,
+				120.0f, 340.0f, 0.4f,
+				vec3(1.0f)*alpha);
+			RenderText("2. OpenGL Superbible", 
+				renderOrtho,
+				70.0f, 300.0f, 0.6f,
+				vec3(1.0f)*alpha);
+			RenderText("- Graham Sellers, Richard S. Wright(Jr.), Nicholas Haemel", 
+				renderOrtho,
+				120.0f, 280.0f, 0.4f,
+				vec3(1.0f)*alpha);
+			RenderText("Music:", 
+				renderOrtho,
+				50.0f, 220.0f, 0.6f,
+				vec3(1.0f)*alpha);
+			RenderText("1. Chopin - Nocturne in E Flat Major", 
+				renderOrtho,
+				70.0f, 190.0f, 0.6f,
+				vec3(1.0f)*alpha);
 			RenderText("Thank You!", 
 				renderOrtho,
-				420.0f, 270.0f, 0.7f,
+				420.0f, 50.0f, 0.6f,
 				vec3(1.0f)*alpha);
 			break;
 
