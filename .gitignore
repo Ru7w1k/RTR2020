@@ -3,3 +3,4 @@
 01-Windows/00-Extra/12-CUDACloth/log.txt
 **/*.res
 01-Windows/00-Extra/12-CUDACloth/CUDACloth.mp4
+**/*.out
