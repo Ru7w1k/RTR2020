@@ -4,6 +4,9 @@
 #include <gl/GL.h>
 #include <gl/GLU.h>
 
+#define _USE_MATH_DEFINES
+#include <math.h>
+
 #include "OGLTemplate.h"
 
 #pragma comment(lib, "opengl32.lib")
@@ -29,8 +32,14 @@ FILE* gpFile = NULL;
 DWORD dwStyle;
 WINDOWPLACEMENT wpPrev = { sizeof(WINDOWPLACEMENT) };
 
-GLfloat pAngle = 0.0f;
-GLfloat cAngle = 0.0f;
+GLfloat angle = 0.0f;
+
+GLfloat identityMatrix[16];
+GLfloat translationMatrix[16];
+GLfloat scaleMatrix[16];
+GLfloat rotationMatrix_X[16];
+GLfloat rotationMatrix_Y[16];
+GLfloat rotationMatrix_Z[16];
 
 // WinMain()
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLine, int iCmdShow)
@@ -80,7 +89,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 	// create window
 	hwnd = CreateWindowEx(WS_EX_APPWINDOW,
 		szAppName,
-		TEXT("OpenGL | Pyramid and Cube"),
+		TEXT("OpenGL | Matrix"),
 		WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE,
 		(width / 2) - 400,
 		(height / 2) - 300,
@@ -278,6 +287,70 @@ void initialize(void)
 
 	// set clear color
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	
+	// matrix initializations
+	// IDENTITY
+	identityMatrix[0] = 1.0f;
+	identityMatrix[1] = 0.0f;
+	identityMatrix[2] = 0.0f;
+	identityMatrix[3] = 0.0f;
+
+	identityMatrix[4] = 0.0f;
+	identityMatrix[5] = 1.0f;
+	identityMatrix[6] = 0.0f;
+	identityMatrix[7] = 0.0f;
+
+	identityMatrix[8] = 0.0f;
+	identityMatrix[9] = 0.0f;
+	identityMatrix[10] = 1.0f;
+	identityMatrix[11] = 0.0f;
+
+	identityMatrix[12] = 0.0f;
+	identityMatrix[13] = 0.0f;
+	identityMatrix[14] = 0.0f;
+	identityMatrix[15] = 1.0f;
+
+	// TRANSLATTION
+	translationMatrix[0] = 1.0f;
+	translationMatrix[1] = 0.0f;
+	translationMatrix[2] = 0.0f;
+	translationMatrix[3] = 0.0f;
+
+	translationMatrix[4] = 0.0f;
+	translationMatrix[5] = 1.0f;
+	translationMatrix[6] = 0.0f;
+	translationMatrix[7] = 0.0f;
+
+	translationMatrix[8] = 0.0f;
+	translationMatrix[9] = 0.0f;
+	translationMatrix[10] = 1.0f;
+	translationMatrix[11] = 0.0f;
+
+	translationMatrix[12] = 0.0f;
+	translationMatrix[13] = 0.0f;
+	translationMatrix[14] = -6.0f;
+	translationMatrix[15] = 1.0f;
+
+	// SCALE
+	scaleMatrix[0] = 0.75f;
+	scaleMatrix[1] = 0.0f;
+	scaleMatrix[2] = 0.0f;
+	scaleMatrix[3] = 0.0f;
+
+	scaleMatrix[4] = 0.0f;
+	scaleMatrix[5] = 0.75f;
+	scaleMatrix[6] = 0.0f;
+	scaleMatrix[7] = 0.0f;
+
+	scaleMatrix[8] = 0.0f;
+	scaleMatrix[9] = 0.0f;
+	scaleMatrix[10] = 0.75f;
+	scaleMatrix[11] = 0.0f;
+
+	scaleMatrix[12] = 0.0f;
+	scaleMatrix[13] = 0.0f;
+	scaleMatrix[14] = 0.0f;
+	scaleMatrix[15] = 1.0f;
 
 	// depth
 	glClearDepth(1.0f);
@@ -311,51 +384,80 @@ void display(void)
 	// code
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
-	glTranslatef(-2.0f, 0.0f, -6.0f);
-	glRotatef(pAngle, 0.0f, 1.0f, 0.0f);
+	GLfloat angle_rad = angle * M_PI / 180.0f;
 
-	glBegin(GL_TRIANGLES);
-		/* Front */
-		glColor3f(1.0f, 0.0f, 0.0f);
-		glVertex3f(0.0f, 1.0f, 0.0f);
-		glColor3f(0.0f, 1.0f, 0.0f);
-		glVertex3f(-1.0f, -1.0f, 1.0f);
-		glColor3f(0.0f, 0.0f, 1.0f);
-		glVertex3f(1.0f, -1.0f, 1.0f);
+	// ROTATION X
+	rotationMatrix_X[0] = 1.0f;
+	rotationMatrix_X[1] = 0.0f;
+	rotationMatrix_X[2] = 0.0f;
+	rotationMatrix_X[3] = 0.0f;
 
-		/* Right */
-		glColor3f(1.0f, 0.0f, 0.0f);
-		glVertex3f(0.0f, 1.0f, 0.0f);
-		glColor3f(0.0f, 0.0f, 1.0f);
-		glVertex3f(1.0f, -1.0f, 1.0f);
-		glColor3f(0.0f, 1.0f, 0.0f);
-		glVertex3f(1.0f, -1.0f, -1.0f);
+	rotationMatrix_X[4] = 0.0f;
+	rotationMatrix_X[5] = cosf(angle_rad);
+	rotationMatrix_X[6] = sinf(angle_rad);
+	rotationMatrix_X[7] = 0.0f;
 
-		/* Left */
-		glColor3f(1.0f, 0.0f, 0.0f);
-		glVertex3f(0.0f, 1.0f, 0.0f);
-		glColor3f(0.0f, 0.0f, 1.0f);
-		glVertex3f(-1.0f, -1.0f, -1.0f);
-		glColor3f(0.0f, 1.0f, 0.0f);
-		glVertex3f(-1.0f, -1.0f, 1.0f);
+	rotationMatrix_X[8] = 0.0f;
+	rotationMatrix_X[9] = -sinf(angle_rad);
+	rotationMatrix_X[10] = cosf(angle_rad);
+	rotationMatrix_X[11] = 0.0f;
 
-		/* Back */
-		glColor3f(1.0f, 0.0f, 0.0f);
-		glVertex3f(0.0f, 1.0f, 0.0f);
-		glColor3f(0.0f, 1.0f, 0.0f);
-		glVertex3f(1.0f, -1.0f, -1.0f);
-		glColor3f(0.0f, 0.0f, 1.0f);
-		glVertex3f(-1.0f, -1.0f, -1.0f);
-	glEnd();
+	rotationMatrix_X[12] = 0.0f;
+	rotationMatrix_X[13] = 0.0f;
+	rotationMatrix_X[14] = 0.0f;
+	rotationMatrix_X[15] = 1.0f;
 
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
-	glTranslatef(2.0f, 0.0f, -6.0f);
-	glScalef(0.75f, 0.75f, 0.75f);
-	glRotatef(cAngle, 1.0f, 1.0f, 1.0f);
+	// ROTATION Y
+	rotationMatrix_Y[0] = cosf(angle_rad);
+	rotationMatrix_Y[1] = 0.0f;
+	rotationMatrix_Y[2] = -sinf(angle_rad);
+	rotationMatrix_Y[3] = 0.0f;
+
+	rotationMatrix_Y[4] = 0.0f;
+	rotationMatrix_Y[5] = 1.0f;
+	rotationMatrix_Y[6] = 0.0f;
+	rotationMatrix_Y[7] = 0.0f;
+
+	rotationMatrix_Y[8] = sinf(angle_rad);
+	rotationMatrix_Y[9] = 0.0f;
+	rotationMatrix_Y[10] = cosf(angle_rad);
+	rotationMatrix_Y[11] = 0.0f;
+
+	rotationMatrix_Y[12] = 0.0f;
+	rotationMatrix_Y[13] = 0.0f;
+	rotationMatrix_Y[14] = 0.0f;
+	rotationMatrix_Y[15] = 1.0f;
 	
+	// ROTATION Z
+	rotationMatrix_Z[0] = cosf(angle_rad);
+	rotationMatrix_Z[1] = sinf(angle_rad);
+	rotationMatrix_Z[2] = 0.0f;
+	rotationMatrix_Z[3] = 0.0f;
+
+	rotationMatrix_Z[4] = -sinf(angle_rad);
+	rotationMatrix_Z[5] = cosf(angle_rad);
+	rotationMatrix_Z[6] = 0.0f;
+	rotationMatrix_Z[7] = 0.0f;
+
+	rotationMatrix_Z[8] = 0.0f;
+	rotationMatrix_Z[9] = 0.0f;
+	rotationMatrix_Z[10] = 1.0f;
+	rotationMatrix_Z[11] = 0.0f;
+
+	rotationMatrix_Z[12] = 0.0f;
+	rotationMatrix_Z[13] = 0.0f;
+	rotationMatrix_Z[14] = 0.0f;
+	rotationMatrix_Z[15] = 1.0f;
+
+	glMatrixMode(GL_MODELVIEW);
+	glLoadMatrixf(identityMatrix);
+
+	glMultMatrixf(translationMatrix);
+	glMultMatrixf(scaleMatrix);
+	glMultMatrixf(rotationMatrix_X);
+	glMultMatrixf(rotationMatrix_Y);
+	glMultMatrixf(rotationMatrix_Z);
+
 	glBegin(GL_QUADS);
 		/* Top */
 		glColor3f(1.0f, 0.0f, 0.0f);
@@ -411,11 +513,8 @@ void display(void)
 
 void update(void)
 {
-	pAngle += 1.0f;
-	if (pAngle >= 360.0f) pAngle = 0.0f;
-
-	cAngle += 1.0f;
-	if (cAngle >= 360.0f) cAngle = 0.0f;
+	angle += 1.0f;
+	if (angle >= 360.0f) angle = 0.0f;
 }
 
 void uninitialize(void)
