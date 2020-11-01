@@ -53,7 +53,7 @@ struct CBUFFER
 	XMMATRIX WorldViewProjectionMatrix;
 };
 
-XMMATRIX gOrthographicProjectionMatrix;
+XMMATRIX gPerspectiveProjectionMatrix;
 
 // WinMain
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLine, int iCmdShow)
@@ -103,7 +103,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 
 	// create window
 	hwnd = CreateWindow(szClassName,
-		TEXT("DirectX | Orthographic"),
+		TEXT("DirectX | Perspective"),
 		WS_OVERLAPPEDWINDOW,
 		100,
 		100,
@@ -525,9 +525,9 @@ HRESULT initialize(void)
 	//// vertex data //////////////////////////////////////////////////////////////
 	// clockwise | left hand rule
 	float vertices[] = {
-		 0.0f,  50.0f, 0.0f,  // apex
-		50.0f, -50.0f, 0.0f,  // right
-	   -50.0f, -50.0f, 0.0f,  // left
+		0.0f,  1.0f, 0.0f,  // apex
+		1.0f, -1.0f, 0.0f,  // right
+	   -1.0f, -1.0f, 0.0f,  // left
 	};
 
 	// create vertex buffer
@@ -589,7 +589,7 @@ HRESULT initialize(void)
 	gClearColor[3] = 1.0f;
 
 	// set projection matrix
-	gOrthographicProjectionMatrix = XMMatrixIdentity();
+	gPerspectiveProjectionMatrix = XMMatrixIdentity();
 
 	// call resize for the first time
 	hr = resize(WIN_WIDTH, WIN_HEIGHT);
@@ -654,19 +654,13 @@ HRESULT resize(int width, int height)
 
 	gpID3D11DeviceContext->RSSetViewports(1, &d3dViewport);
 
-	// set orthographic matrix
-	if (width <= height)
-		gOrthographicProjectionMatrix = XMMatrixOrthographicOffCenterLH(
-			-100.0f, 100.0f,
-			-100.0f * ((float)height/(float)width), 100.0f * ((float)height / (float)width),
-			-100.0f, 100.0f
-		);
-	else
-		gOrthographicProjectionMatrix = XMMatrixOrthographicOffCenterLH(
-			-100.0f * ((float)width / (float)height), 100.0f * ((float)width / (float)height),
-			-100.0f, 100.0f,
-			-100.0f, 100.0f
-		);
+	// set perspective matrix
+	gPerspectiveProjectionMatrix = XMMatrixPerspectiveFovLH(
+		XMConvertToRadians(45.0f),
+		(FLOAT)width / (FLOAT)height,
+		0.1f,
+		100.0f
+	);
 
 	return(hr);
 }
@@ -689,8 +683,11 @@ void display(void)
 	XMMATRIX worldMatrix = XMMatrixIdentity();
 	XMMATRIX viewMatrix = XMMatrixIdentity();
 
+	// translation
+	worldMatrix = XMMatrixTranslation(0.0f, 0.0f, 3.0f);
+
 	// final WorldViewProjection matrix
-	XMMATRIX wvpMatrix = worldMatrix * viewMatrix * gOrthographicProjectionMatrix;
+	XMMATRIX wvpMatrix = worldMatrix * viewMatrix * gPerspectiveProjectionMatrix;
 
 	// load the data into the constant buffer
 	CBUFFER constantBuffer;

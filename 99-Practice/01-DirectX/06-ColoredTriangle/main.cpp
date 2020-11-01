@@ -43,7 +43,8 @@ ID3D11RenderTargetView* gpID3D11RenderTargetView = NULL;
 
 ID3D11VertexShader* gpID3D11VertexShader = NULL;
 ID3D11PixelShader* gpID3D11PixelShader = NULL;
-ID3D11Buffer* gpID3D11Buffer_VertexBuffer = NULL;
+ID3D11Buffer* gpID3D11Buffer_VertexBuffer_Position = NULL;
+ID3D11Buffer* gpID3D11Buffer_VertexBuffer_Color = NULL;
 ID3D11InputLayout* gpID3D11InputLayout = NULL;
 ID3D11Buffer* gpID3D11Buffer_ConstantBuffer = NULL;
 
@@ -53,7 +54,7 @@ struct CBUFFER
 	XMMATRIX WorldViewProjectionMatrix;
 };
 
-XMMATRIX gOrthographicProjectionMatrix;
+XMMATRIX gPerspectiveProjectionMatrix;
 
 // WinMain
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLine, int iCmdShow)
@@ -103,7 +104,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 
 	// create window
 	hwnd = CreateWindow(szClassName,
-		TEXT("DirectX | Orthographic"),
+		TEXT("DirectX | Colored Triangle"),
 		WS_OVERLAPPEDWINDOW,
 		100,
 		100,
@@ -374,10 +375,18 @@ HRESULT initialize(void)
 		"	float4x4 worldViewProjectionMatrix;                         \n" \
 		"}                                                              \n" \
 		"                                                               \n" \
-		"float4 main(float4 pos: POSITION): SV_POSITION                 \n" \
+		"struct vertex_output                                           \n" \
 		"{                                                              \n" \
-		"	float4 position = mul(worldViewProjectionMatrix, pos);      \n" \
-		"	return(position);                                           \n" \
+		"	float4 position: SV_POSITION;                               \n" \
+		"	float4 color: COLOR;                                        \n" \
+		"};                                                             \n" \
+		"                                                               \n" \
+		"vertex_output main(float4 pos: POSITION, float4 color: COLOR)  \n" \
+		"{                                                              \n" \
+		"	vertex_output output;                                       \n" \
+		"	output.position = mul(worldViewProjectionMatrix, pos);      \n" \
+		"	output.color    = color;                                    \n" \
+		"	return(output);                                             \n" \
 		"}                                                              \n";
 
 	ID3DBlob* pID3DBlob_VertexShaderCode = NULL;
@@ -433,10 +442,10 @@ HRESULT initialize(void)
 	
 	//// pixel shader /////////////////////////////////////////////////////////////
 	const char* pixelShaderSourceCode =
-		"float4 main(void): SV_TARGET                \n" \
-		"{                                           \n" \
-		"	return(float4(1.0f, 1.0f, 1.0f, 1.0f));  \n" \
-		"}                                           \n";
+		"float4 main(float4 pos: SV_POSITION, float4 color: COLOR): SV_TARGET \n" \
+		"{                                                                    \n" \
+		"	return(color);                                                    \n" \
+		"}                                                                    \n";
 
 	ID3DBlob* pID3DBlob_PixelShaderCode = NULL;
 
@@ -489,17 +498,27 @@ HRESULT initialize(void)
 	///////////////////////////////////////////////////////////////////////////////
 
 	//// create and set input layout //////////////////////////////////////////////
-	D3D11_INPUT_ELEMENT_DESC inputElementDesc;
-	ZeroMemory((void*)&inputElementDesc, sizeof(inputElementDesc));
-	inputElementDesc.SemanticName = "POSITION";
-	inputElementDesc.SemanticIndex = 0;
-	inputElementDesc.Format = DXGI_FORMAT_R32G32B32_FLOAT;
-	inputElementDesc.InputSlot = 0;
-	inputElementDesc.AlignedByteOffset = 0;
-	inputElementDesc.InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
-	inputElementDesc.InstanceDataStepRate = 0;
+	D3D11_INPUT_ELEMENT_DESC inputElementDesc[2];
 
-	hr = gpID3D11Device->CreateInputLayout(&inputElementDesc, 1,
+	// position data
+	inputElementDesc[0].SemanticName = "POSITION";
+	inputElementDesc[0].SemanticIndex = 0;
+	inputElementDesc[0].Format = DXGI_FORMAT_R32G32B32_FLOAT;
+	inputElementDesc[0].InputSlot = 0;
+	inputElementDesc[0].AlignedByteOffset = 0;
+	inputElementDesc[0].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
+	inputElementDesc[0].InstanceDataStepRate = 0;
+
+	// color data
+	inputElementDesc[1].SemanticName = "COLOR";
+	inputElementDesc[1].SemanticIndex = 0;
+	inputElementDesc[1].Format = DXGI_FORMAT_R32G32B32_FLOAT;
+	inputElementDesc[1].InputSlot = 1;
+	inputElementDesc[1].AlignedByteOffset = 0;
+	inputElementDesc[1].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
+	inputElementDesc[1].InstanceDataStepRate = 0;
+
+	hr = gpID3D11Device->CreateInputLayout(inputElementDesc, ARRAYSIZE(inputElementDesc),
 		pID3DBlob_VertexShaderCode->GetBufferPointer(), pID3DBlob_VertexShaderCode->GetBufferSize(),
 		&gpID3D11InputLayout);
 	if (FAILED(hr))
@@ -525,12 +544,18 @@ HRESULT initialize(void)
 	//// vertex data //////////////////////////////////////////////////////////////
 	// clockwise | left hand rule
 	float vertices[] = {
-		 0.0f,  50.0f, 0.0f,  // apex
-		50.0f, -50.0f, 0.0f,  // right
-	   -50.0f, -50.0f, 0.0f,  // left
+		0.0f,  1.0f, 0.0f,  // apex
+		1.0f, -1.0f, 0.0f,  // right
+	   -1.0f, -1.0f, 0.0f,  // left
 	};
 
-	// create vertex buffer
+	float colors[] = {
+		1.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f,
+		0.0f, 0.0f, 1.0f,
+	};
+
+	// create vertex buffer for position
 	D3D11_BUFFER_DESC bufferDesc_VertexBuffer;
 	ZeroMemory(&bufferDesc_VertexBuffer, sizeof(D3D11_BUFFER_DESC));
 	bufferDesc_VertexBuffer.Usage = D3D11_USAGE_DYNAMIC;
@@ -538,24 +563,49 @@ HRESULT initialize(void)
 	bufferDesc_VertexBuffer.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	bufferDesc_VertexBuffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
-	hr = gpID3D11Device->CreateBuffer(&bufferDesc_VertexBuffer, NULL, &gpID3D11Buffer_VertexBuffer);
+	hr = gpID3D11Device->CreateBuffer(&bufferDesc_VertexBuffer, NULL, &gpID3D11Buffer_VertexBuffer_Position);
 	if (FAILED(hr))
 	{
-		Log("ID3D11Device::CreateBuffer() failed for vertex buffer..\n");
+		Log("ID3D11Device::CreateBuffer() failed for vertex buffer position..\n");
 		return(hr);
 	}
 	else
 	{
-		Log("ID3D11Device::CreateBuffer() succeeded for vertex buffer..\n");
+		Log("ID3D11Device::CreateBuffer() succeeded for vertex buffer position..\n");
 	}
 
 	// copy vertices into above buffer
 	D3D11_MAPPED_SUBRESOURCE mappedSubresource;
 	ZeroMemory(&mappedSubresource, sizeof(D3D11_MAPPED_SUBRESOURCE));
-	gpID3D11DeviceContext->Map(gpID3D11Buffer_VertexBuffer, 0,
+	gpID3D11DeviceContext->Map(gpID3D11Buffer_VertexBuffer_Position, 0,
 		D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
 	memcpy(mappedSubresource.pData, vertices, sizeof(vertices));
-	gpID3D11DeviceContext->Unmap(gpID3D11Buffer_VertexBuffer, NULL);
+	gpID3D11DeviceContext->Unmap(gpID3D11Buffer_VertexBuffer_Position, NULL);
+
+	// create vertex buffer for color
+	ZeroMemory(&bufferDesc_VertexBuffer, sizeof(D3D11_BUFFER_DESC));
+	bufferDesc_VertexBuffer.Usage = D3D11_USAGE_DYNAMIC;
+	bufferDesc_VertexBuffer.ByteWidth = sizeof(float) * ARRAYSIZE(colors);
+	bufferDesc_VertexBuffer.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	bufferDesc_VertexBuffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+	hr = gpID3D11Device->CreateBuffer(&bufferDesc_VertexBuffer, NULL, &gpID3D11Buffer_VertexBuffer_Color);
+	if (FAILED(hr))
+	{
+		Log("ID3D11Device::CreateBuffer() failed for vertex buffer color..\n");
+		return(hr);
+	}
+	else
+	{
+		Log("ID3D11Device::CreateBuffer() succeeded for vertex buffer color..\n");
+	}
+
+	// copy colors into above buffer
+	ZeroMemory(&mappedSubresource, sizeof(D3D11_MAPPED_SUBRESOURCE));
+	gpID3D11DeviceContext->Map(gpID3D11Buffer_VertexBuffer_Color, 0,
+		D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
+	memcpy(mappedSubresource.pData, colors, sizeof(colors));
+	gpID3D11DeviceContext->Unmap(gpID3D11Buffer_VertexBuffer_Color, NULL);
 
 	///////////////////////////////////////////////////////////////////////////////
 
@@ -585,11 +635,11 @@ HRESULT initialize(void)
 	// d3d clear color
 	gClearColor[0] = 0.0f;
 	gClearColor[1] = 0.0f;
-	gClearColor[2] = 1.0f;
+	gClearColor[2] = 0.0f;
 	gClearColor[3] = 1.0f;
 
 	// set projection matrix
-	gOrthographicProjectionMatrix = XMMatrixIdentity();
+	gPerspectiveProjectionMatrix = XMMatrixIdentity();
 
 	// call resize for the first time
 	hr = resize(WIN_WIDTH, WIN_HEIGHT);
@@ -654,19 +704,13 @@ HRESULT resize(int width, int height)
 
 	gpID3D11DeviceContext->RSSetViewports(1, &d3dViewport);
 
-	// set orthographic matrix
-	if (width <= height)
-		gOrthographicProjectionMatrix = XMMatrixOrthographicOffCenterLH(
-			-100.0f, 100.0f,
-			-100.0f * ((float)height/(float)width), 100.0f * ((float)height / (float)width),
-			-100.0f, 100.0f
-		);
-	else
-		gOrthographicProjectionMatrix = XMMatrixOrthographicOffCenterLH(
-			-100.0f * ((float)width / (float)height), 100.0f * ((float)width / (float)height),
-			-100.0f, 100.0f,
-			-100.0f, 100.0f
-		);
+	// set perspective matrix
+	gPerspectiveProjectionMatrix = XMMatrixPerspectiveFovLH(
+		XMConvertToRadians(45.0f),
+		(FLOAT)width / (FLOAT)height,
+		0.1f,
+		100.0f
+	);
 
 	return(hr);
 }
@@ -678,9 +722,15 @@ void display(void)
 	gpID3D11DeviceContext->ClearRenderTargetView(gpID3D11RenderTargetView, gClearColor);
 
 	// select which vertex buffer to display
+	// position buffer
 	UINT stride = sizeof(float) * 3;
 	UINT offset = 0;
-	gpID3D11DeviceContext->IASetVertexBuffers(0, 1, &gpID3D11Buffer_VertexBuffer, &stride, &offset);
+	gpID3D11DeviceContext->IASetVertexBuffers(0, 1, &gpID3D11Buffer_VertexBuffer_Position, &stride, &offset);
+
+	// color buffer
+	stride = sizeof(float) * 3;
+	offset = 0;
+	gpID3D11DeviceContext->IASetVertexBuffers(1, 1, &gpID3D11Buffer_VertexBuffer_Color, &stride, &offset);
 
 	// select geometry primitive
 	gpID3D11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -689,8 +739,11 @@ void display(void)
 	XMMATRIX worldMatrix = XMMatrixIdentity();
 	XMMATRIX viewMatrix = XMMatrixIdentity();
 
+	// translation
+	worldMatrix = XMMatrixTranslation(0.0f, 0.0f, 3.0f);
+
 	// final WorldViewProjection matrix
-	XMMATRIX wvpMatrix = worldMatrix * viewMatrix * gOrthographicProjectionMatrix;
+	XMMATRIX wvpMatrix = worldMatrix * viewMatrix * gPerspectiveProjectionMatrix;
 
 	// load the data into the constant buffer
 	CBUFFER constantBuffer;
@@ -720,10 +773,16 @@ void uninitialize(void)
 		gpID3D11InputLayout = NULL;
 	}
 
-	if (gpID3D11Buffer_VertexBuffer)
+	if (gpID3D11Buffer_VertexBuffer_Color)
 	{
-		gpID3D11Buffer_VertexBuffer->Release();
-		gpID3D11Buffer_VertexBuffer = NULL;
+		gpID3D11Buffer_VertexBuffer_Color->Release();
+		gpID3D11Buffer_VertexBuffer_Color = NULL;
+	}
+
+	if (gpID3D11Buffer_VertexBuffer_Position)
+	{
+		gpID3D11Buffer_VertexBuffer_Position->Release();
+		gpID3D11Buffer_VertexBuffer_Position = NULL;
 	}
 
 	if (gpID3D11PixelShader)
