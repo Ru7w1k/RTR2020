@@ -1,21 +1,29 @@
 Log.txt file created..
-D3D11CreateDeviceAndSwapChain() succeeded..
-The chosen driver is of: Hardware Type. 
-The supported highest feature level is: 11.0 
-D3DCompile() successful for Vertex Shader()..
-ID3D11Device::CreateVertexShader() succeeded..
-D3DCompile() successful for Pixel Shader()..
-ID3D11Device::CreatePixelShader() succeeded..
-ID3D11Device::CreateInputLayout() succeeded..
-ID3D11Device::CreateBuffer() succeeded for vertex buffer position..
-ID3D11Device::CreateBuffer() succeeded for vertex buffer color..
-ID3D11Device::CreateBuffer() succeeded for vertex buffer position..
-ID3D11Device::CreateBuffer() succeeded for vertex buffer color..
-ID3D11Device::CreateBuffer() succeeded for constant buffer..
-ID3D11Device::CreateRasterizerState() succeeded..
-ID3D11Device::CreateRenderTargerView() succeeded..
-ID3D11::CreateDepthStencilView() succeeded..
-resize() succeeded..
-Initialize() successful!
-Uninitialize() succeeded..
-Log file closed..
+main.cpp:1365D3D11CreateDeviceAndSwapChain() succeeded..
+main.cpp:1365The chosen driver is of: main.cpp:1365Hardware Type. 
+main.cpp:1365The supported highest feature level is: main.cpp:136511.0 
+main.cpp:1365D3DCompile() successful for Vertex Shader()..
+main.cpp:1365ID3D11Device::CreateVertexShader() succeeded..
+main.cpp:1365D3DCompile() successful for Pixel Shader()..
+main.cpp:1365ID3D11Device::CreatePixelShader() succeeded..
+main.cpp:1365ID3D11Device::CreateInputLayout() succeeded..
+main.cpp:1365ID3D11Device::CreateBuffer() succeeded for vertex buffer position..
+main.cpp:1365ID3D11Device::CreateBuffer() succeeded for vertex buffer color..
+main.cpp:1365ID3D11Device::CreateBuffer() succeeded for vertex buffer position..
+main.cpp:1365ID3D11Device::CreateBuffer() succeeded for vertex buffer color..
+main.cpp:1365ID3D11Device::CreateBuffer() succeeded for constant buffer..
+main.cpp:1365ID3D11Device::CreateRasterizerState() succeeded..
+main.cpp:1365DirectX::CreateWICTextureFromFile() succeeded..
+main.cpp:1365LoadD3DTexture() succeeded..
+main.cpp:1365ID3D11Device::CreateSamplerState() succeeded..
+main.cpp:1365DirectX::CreateWICTextureFromFile() succeeded..
+main.cpp:1365LoadD3DTexture() succeeded..
+main.cpp:1365ID3D11Device::CreateSamplerState() succeeded..
+main.cpp:1365ID3D11Device::CreateRenderTargerView() succeeded..
+main.cpp:1365ID3D11::CreateDepthStencilView() succeeded..
+main.cpp:1365resize() succeeded..
+main.cpp:1365Initialize() successful!
+main.cpp:1365Uninitialize() succeeded..
+main.cpp:1365Log file closed..
+main.cpp:1365Uninitialize() succeeded..
+main.cpp:1365Log file closed..

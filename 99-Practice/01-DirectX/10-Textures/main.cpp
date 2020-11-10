@@ -7,12 +7,14 @@
 
 #pragma warning(disable:4838)
 #include "XNAMath\xnamath.h"
+#include "WICTextureLoader.h"
 
 #include "main.h"
 
 // linker commands
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "d3dcompiler.lib")
+#pragma comment(lib, "DirectXTK.lib")
 
 // macros
 #define WIN_WIDTH  800
@@ -45,15 +47,20 @@ ID3D11VertexShader *gpID3D11VertexShader = NULL;
 ID3D11PixelShader *gpID3D11PixelShader = NULL;
 
 ID3D11Buffer *gpID3D11Buffer_VertexBuffer_Pyramid_Position = NULL;
-ID3D11Buffer *gpID3D11Buffer_VertexBuffer_Pyramid_Color = NULL;
+ID3D11Buffer *gpID3D11Buffer_VertexBuffer_Pyramid_Texture = NULL;
 ID3D11Buffer *gpID3D11Buffer_VertexBuffer_Cube_Position = NULL;
-ID3D11Buffer *gpID3D11Buffer_VertexBuffer_Cube_Color = NULL;
+ID3D11Buffer *gpID3D11Buffer_VertexBuffer_Cube_Texture = NULL;
 
 ID3D11InputLayout *gpID3D11InputLayout = NULL;
 ID3D11Buffer *gpID3D11Buffer_ConstantBuffer = NULL;
 
 ID3D11RasterizerState *gpID3D11RasterizerState = NULL;
 ID3D11DepthStencilView *gpID3D11DepthStencilView = NULL;
+
+ID3D11ShaderResourceView *gpID3D11ShaderResourceView_Pyramid_Texture = NULL;
+ID3D11SamplerState *gpID3D11SamplerState_Pyramid_Texture = NULL;
+ID3D11ShaderResourceView *gpID3D11ShaderResourceView_Cube_Texture = NULL;
+ID3D11SamplerState *gpID3D11SamplerState_Cube_Texture = NULL;
 
 float gAnglePyramid = 0.0f;
 float gAngleCube = 0.0f;
@@ -298,6 +305,7 @@ void ToggleFullScreen(void)
 HRESULT initialize(void)
 {
 	// function declarations
+	HRESULT LoadD3DTexture(const wchar_t*, ID3D11ShaderResourceView **);
 	void uninitialize(void);
 	HRESULT resize(int, int);
 
@@ -386,24 +394,24 @@ HRESULT initialize(void)
 
 	//// vertex shader ////////////////////////////////////////////////////////////
 	const char *vertexShaderSourceCode =
-		"cbuffer ConstantBuffer                                         \n" \
-		"{                                                              \n" \
-		"	float4x4 worldViewProjectionMatrix;                         \n" \
-		"}                                                              \n" \
-		"                                                               \n" \
-		"struct vertex_output                                           \n" \
-		"{                                                              \n" \
-		"	float4 position: SV_POSITION;                               \n" \
-		"	float4 color: COLOR;                                        \n" \
-		"};                                                             \n" \
-		"                                                               \n" \
-		"vertex_output main(float4 pos: POSITION, float4 color: COLOR)  \n" \
-		"{                                                              \n" \
-		"	vertex_output output;                                       \n" \
-		"	output.position = mul(worldViewProjectionMatrix, pos);      \n" \
-		"	output.color    = color;                                    \n" \
-		"	return(output);                                             \n" \
-		"}                                                              \n";
+		"cbuffer ConstantBuffer                                               \n" \
+		"{                                                                    \n" \
+		"	float4x4 worldViewProjectionMatrix;                               \n" \
+		"}                                                                    \n" \
+		"                                                                     \n" \
+		"struct vertex_output                                                 \n" \
+		"{                                                                    \n" \
+		"	float4 position: SV_POSITION;                                     \n" \
+		"	float2 texcoord: TEXCOORD;                                        \n" \
+		"};                                                                   \n" \
+		"                                                                     \n" \
+		"vertex_output main(float4 pos: POSITION, float2 texcoord: TEXCOORD)  \n" \
+		"{                                                                    \n" \
+		"	vertex_output output;                                             \n" \
+		"	output.position = mul(worldViewProjectionMatrix, pos);            \n" \
+		"	output.texcoord = texcoord;                                       \n" \
+		"	return(output);                                                   \n" \
+		"}                                                                    \n";
 
 	ID3DBlob *pID3DBlob_VertexShaderCode = NULL;
 	ID3DBlob *pID3DBlob_Error = NULL;
@@ -458,10 +466,14 @@ HRESULT initialize(void)
 	
 	//// pixel shader /////////////////////////////////////////////////////////////
 	const char *pixelShaderSourceCode =
-		"float4 main(float4 pos: SV_POSITION, float4 color: COLOR): SV_TARGET \n" \
-		"{                                                                    \n" \
-		"	return(color);                                                    \n" \
-		"}                                                                    \n";
+		"Texture2D myTexture2D;                                                     \n" \
+		"SamplerState mySamplerState;                                               \n" \
+		"                                                                           \n" \
+		"float4 main(float4 pos: SV_POSITION, float2 texcoord: TEXCOORD): SV_TARGET \n" \
+		"{                                                                          \n" \
+		"	float4 color = myTexture2D.Sample(mySamplerState, texcoord);            \n" \
+		"	return(color);                                                          \n" \
+		"}                                                                          \n";
 
 	ID3DBlob *pID3DBlob_PixelShaderCode = NULL;
 
@@ -525,10 +537,10 @@ HRESULT initialize(void)
 	inputElementDesc[0].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
 	inputElementDesc[0].InstanceDataStepRate = 0;
 
-	// color data
-	inputElementDesc[1].SemanticName = "COLOR";
+	// texture data
+	inputElementDesc[1].SemanticName = "TEXCOORD";
 	inputElementDesc[1].SemanticIndex = 0;
-	inputElementDesc[1].Format = DXGI_FORMAT_R32G32B32_FLOAT;
+	inputElementDesc[1].Format = DXGI_FORMAT_R32G32_FLOAT;
 	inputElementDesc[1].InputSlot = 1;
 	inputElementDesc[1].AlignedByteOffset = 0;
 	inputElementDesc[1].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
@@ -766,11 +778,11 @@ HRESULT initialize(void)
 	// create vertex buffer for color pyramid
 	ZeroMemory(&bufferDesc_VertexBuffer, sizeof(D3D11_BUFFER_DESC));
 	bufferDesc_VertexBuffer.Usage = D3D11_USAGE_DYNAMIC;
-	bufferDesc_VertexBuffer.ByteWidth = sizeof(float)  *ARRAYSIZE(colors_pyramid);
+	bufferDesc_VertexBuffer.ByteWidth = sizeof(float)  *ARRAYSIZE(texture_pyramid);
 	bufferDesc_VertexBuffer.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	bufferDesc_VertexBuffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
-	hr = gpID3D11Device->CreateBuffer(&bufferDesc_VertexBuffer, NULL, &gpID3D11Buffer_VertexBuffer_Pyramid_Color);
+	hr = gpID3D11Device->CreateBuffer(&bufferDesc_VertexBuffer, NULL, &gpID3D11Buffer_VertexBuffer_Pyramid_Texture);
 	if (FAILED(hr))
 	{
 		Log("ID3D11Device::CreateBuffer() failed for vertex buffer color..\n");
@@ -781,12 +793,12 @@ HRESULT initialize(void)
 		Log("ID3D11Device::CreateBuffer() succeeded for vertex buffer color..\n");
 	}
 
-	// copy colors_pyramid into above buffer
+	// copy texture_pyramid into above buffer
 	ZeroMemory(&mappedSubresource, sizeof(D3D11_MAPPED_SUBRESOURCE));
-	gpID3D11DeviceContext->Map(gpID3D11Buffer_VertexBuffer_Pyramid_Color, 0,
+	gpID3D11DeviceContext->Map(gpID3D11Buffer_VertexBuffer_Pyramid_Texture, 0,
 		D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
-	memcpy(mappedSubresource.pData, colors_pyramid, sizeof(colors_pyramid));
-	gpID3D11DeviceContext->Unmap(gpID3D11Buffer_VertexBuffer_Pyramid_Color, NULL);
+	memcpy(mappedSubresource.pData, texture_pyramid, sizeof(texture_pyramid));
+	gpID3D11DeviceContext->Unmap(gpID3D11Buffer_VertexBuffer_Pyramid_Texture, NULL);
 
 	///////////////////////////////////////////////////////////////////////////////
 
@@ -820,11 +832,11 @@ HRESULT initialize(void)
 	// create vertex buffer for color cube
 	ZeroMemory(&bufferDesc_VertexBuffer, sizeof(D3D11_BUFFER_DESC));
 	bufferDesc_VertexBuffer.Usage = D3D11_USAGE_DYNAMIC;
-	bufferDesc_VertexBuffer.ByteWidth = sizeof(float)  *ARRAYSIZE(colors_cube);
+	bufferDesc_VertexBuffer.ByteWidth = sizeof(float)  *ARRAYSIZE(texture_cube);
 	bufferDesc_VertexBuffer.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	bufferDesc_VertexBuffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
-	hr = gpID3D11Device->CreateBuffer(&bufferDesc_VertexBuffer, NULL, &gpID3D11Buffer_VertexBuffer_Cube_Color);
+	hr = gpID3D11Device->CreateBuffer(&bufferDesc_VertexBuffer, NULL, &gpID3D11Buffer_VertexBuffer_Cube_Texture);
 	if (FAILED(hr))
 	{
 		Log("ID3D11Device::CreateBuffer() failed for vertex buffer color..\n");
@@ -835,12 +847,12 @@ HRESULT initialize(void)
 		Log("ID3D11Device::CreateBuffer() succeeded for vertex buffer color..\n");
 	}
 
-	// copy colors_cube into above buffer
+	// copy texture_cube into above buffer
 	ZeroMemory(&mappedSubresource, sizeof(D3D11_MAPPED_SUBRESOURCE));
-	gpID3D11DeviceContext->Map(gpID3D11Buffer_VertexBuffer_Cube_Color, 0,
+	gpID3D11DeviceContext->Map(gpID3D11Buffer_VertexBuffer_Cube_Texture, 0,
 		D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
-	memcpy(mappedSubresource.pData, colors_cube, sizeof(colors_cube));
-	gpID3D11DeviceContext->Unmap(gpID3D11Buffer_VertexBuffer_Cube_Color, NULL);
+	memcpy(mappedSubresource.pData, texture_cube, sizeof(texture_cube));
+	gpID3D11DeviceContext->Unmap(gpID3D11Buffer_VertexBuffer_Cube_Texture, NULL);
 
 	///////////////////////////////////////////////////////////////////////////////
 
@@ -896,6 +908,73 @@ HRESULT initialize(void)
 	}
 	
 	gpID3D11DeviceContext->RSSetState(gpID3D11RasterizerState);
+
+	///////////////////////////////////////////////////////////////////////////////
+	
+	//// texture stone ////////////////////////////////////////////////////////////
+
+	// create texture resource and texture view
+	hr = LoadD3DTexture(L"Stone.bmp", &gpID3D11ShaderResourceView_Pyramid_Texture);
+	if (FAILED(hr))
+	{
+		Log("LoadD3DTexture() failed..\n");
+		return(hr);
+	}
+	else
+	{
+		Log("LoadD3DTexture() succeeded..\n");
+	}
+
+	// create sampler state
+	D3D11_SAMPLER_DESC samplerDesc;
+	ZeroMemory(&samplerDesc, sizeof(D3D11_SAMPLER_DESC));
+	samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+
+	hr = gpID3D11Device->CreateSamplerState(&samplerDesc, &gpID3D11SamplerState_Pyramid_Texture);
+	if (FAILED(hr))
+	{
+		Log("ID3D11Device::CreateSamplerState() failed..\n");
+	}
+	else 
+	{
+		Log("ID3D11Device::CreateSamplerState() succeeded..\n");
+	}
+
+	///////////////////////////////////////////////////////////////////////////////
+
+	//// texture kundali ////////////////////////////////////////////////////////////
+
+	// create texture resource and texture view
+	hr = LoadD3DTexture(L"kundali.bmp", &gpID3D11ShaderResourceView_Cube_Texture);
+	if (FAILED(hr))
+	{
+		Log("LoadD3DTexture() failed..\n");
+		return(hr);
+	}
+	else
+	{
+		Log("LoadD3DTexture() succeeded..\n");
+	}
+
+	// create sampler state
+	ZeroMemory(&samplerDesc, sizeof(D3D11_SAMPLER_DESC));
+	samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+
+	hr = gpID3D11Device->CreateSamplerState(&samplerDesc, &gpID3D11SamplerState_Cube_Texture);
+	if (FAILED(hr))
+	{
+		Log("ID3D11Device::CreateSamplerState() failed..\n");
+	}
+	else 
+	{
+		Log("ID3D11Device::CreateSamplerState() succeeded..\n");
+	}
 
 	///////////////////////////////////////////////////////////////////////////////
 
@@ -1036,14 +1115,18 @@ void display(void)
 
 	// select which vertex buffer to display
 	// position buffer
-	UINT stride = sizeof(float)  *3;
+	UINT stride = sizeof(float) * 3;
 	UINT offset = 0;
 	gpID3D11DeviceContext->IASetVertexBuffers(0, 1, &gpID3D11Buffer_VertexBuffer_Pyramid_Position, &stride, &offset);
 
-	// color buffer
-	stride = sizeof(float)  *3;
+	// texcoords buffer
+	stride = sizeof(float) * 2;
 	offset = 0;
-	gpID3D11DeviceContext->IASetVertexBuffers(1, 1, &gpID3D11Buffer_VertexBuffer_Pyramid_Color, &stride, &offset);
+	gpID3D11DeviceContext->IASetVertexBuffers(1, 1, &gpID3D11Buffer_VertexBuffer_Pyramid_Texture, &stride, &offset);
+
+	// bind texture and sampler as pixel shader resource
+	gpID3D11DeviceContext->PSSetShaderResources(0, 1, &gpID3D11ShaderResourceView_Pyramid_Texture);
+	gpID3D11DeviceContext->PSSetSamplers(0, 1, &gpID3D11SamplerState_Pyramid_Texture);
 
 	// select geometry primitive
 	gpID3D11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -1079,14 +1162,18 @@ void display(void)
 
 	// select which vertex buffer to display
 	// position buffer
-	stride = sizeof(float)  *3;
+	stride = sizeof(float) * 3;
 	offset = 0;
 	gpID3D11DeviceContext->IASetVertexBuffers(0, 1, &gpID3D11Buffer_VertexBuffer_Cube_Position, &stride, &offset);
 
-	// color buffer
-	stride = sizeof(float)  *3;
+	// texcoord buffer
+	stride = sizeof(float) * 2;
 	offset = 0;
-	gpID3D11DeviceContext->IASetVertexBuffers(1, 1, &gpID3D11Buffer_VertexBuffer_Cube_Color, &stride, &offset);
+	gpID3D11DeviceContext->IASetVertexBuffers(1, 1, &gpID3D11Buffer_VertexBuffer_Cube_Texture, &stride, &offset);
+
+	// bind texture and sampler as pixel shader resource
+	gpID3D11DeviceContext->PSSetShaderResources(0, 1, &gpID3D11ShaderResourceView_Cube_Texture);
+	gpID3D11DeviceContext->PSSetSamplers(0, 1, &gpID3D11SamplerState_Cube_Texture);
 
 	// select geometry primitive
 	gpID3D11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -1143,6 +1230,30 @@ void update(void)
 void uninitialize(void)
 {
 	// code
+	if (gpID3D11SamplerState_Cube_Texture)
+	{
+		gpID3D11SamplerState_Cube_Texture->Release();
+		gpID3D11SamplerState_Cube_Texture = NULL;
+	}
+
+	if (gpID3D11ShaderResourceView_Cube_Texture)
+	{
+		gpID3D11ShaderResourceView_Cube_Texture->Release();
+		gpID3D11ShaderResourceView_Cube_Texture = NULL;
+	}
+
+	if (gpID3D11SamplerState_Pyramid_Texture)
+	{
+		gpID3D11SamplerState_Pyramid_Texture->Release();
+		gpID3D11SamplerState_Pyramid_Texture = NULL;
+	}
+
+	if (gpID3D11ShaderResourceView_Pyramid_Texture)
+	{
+		gpID3D11ShaderResourceView_Pyramid_Texture->Release();
+		gpID3D11ShaderResourceView_Pyramid_Texture = NULL;
+	}
+	
 	if (gpID3D11Buffer_ConstantBuffer)
 	{
 		gpID3D11Buffer_ConstantBuffer->Release();
@@ -1155,10 +1266,10 @@ void uninitialize(void)
 		gpID3D11InputLayout = NULL;
 	}
 
-	if (gpID3D11Buffer_VertexBuffer_Pyramid_Color)
+	if (gpID3D11Buffer_VertexBuffer_Pyramid_Texture)
 	{
-		gpID3D11Buffer_VertexBuffer_Pyramid_Color->Release();
-		gpID3D11Buffer_VertexBuffer_Pyramid_Color = NULL;
+		gpID3D11Buffer_VertexBuffer_Pyramid_Texture->Release();
+		gpID3D11Buffer_VertexBuffer_Pyramid_Texture = NULL;
 	}
 
 	if (gpID3D11Buffer_VertexBuffer_Pyramid_Position)
@@ -1167,10 +1278,10 @@ void uninitialize(void)
 		gpID3D11Buffer_VertexBuffer_Pyramid_Position = NULL;
 	}
 
-	if (gpID3D11Buffer_VertexBuffer_Cube_Color)
+	if (gpID3D11Buffer_VertexBuffer_Cube_Texture)
 	{
-		gpID3D11Buffer_VertexBuffer_Cube_Color->Release();
-		gpID3D11Buffer_VertexBuffer_Cube_Color = NULL;
+		gpID3D11Buffer_VertexBuffer_Cube_Texture->Release();
+		gpID3D11Buffer_VertexBuffer_Cube_Texture = NULL;
 	}
 
 	if (gpID3D11Buffer_VertexBuffer_Cube_Position)
@@ -1230,10 +1341,28 @@ void uninitialize(void)
 	}
 }
 
+HRESULT LoadD3DTexture(const wchar_t *textureFileName, ID3D11ShaderResourceView **ppID3D11ShaderResourceView)
+{
+	// code
+	HRESULT hr;
+
+	// create texture
+	hr = DirectX::CreateWICTextureFromFile(gpID3D11Device, textureFileName, NULL, ppID3D11ShaderResourceView);
+	if (FAILED(hr))
+	{
+		Log("DirectX::CreateWICTextureFromFile() failed..\n");
+		return(hr);
+	}
+	else
+	{
+		Log("DirectX::CreateWICTextureFromFile() succeeded..\n");
+	}
+}
 
 void Log(const char *str)
 {
 	fopen_s(&gpFile, gszLogFile, "a+");
+	fprintf_s(gpFile, "%s:%d", __FILE__, __LINE__);
 	fprintf_s(gpFile, str);
 	fclose(gpFile);
 }
