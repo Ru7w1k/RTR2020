@@ -342,8 +342,10 @@ void ToggleFullScreen()
 					HWND_TOP,
 					MI.rcMonitor.left,
 					MI.rcMonitor.top,
-					1920,//MI.rcMonitor.right - MI.rcMonitor.left,
-					1080,//MI.rcMonitor.bottom - MI.rcMonitor.top,
+					//MI.rcMonitor.right - MI.rcMonitor.left,
+					//MI.rcMonitor.bottom - MI.rcMonitor.top,
+					1920,
+					1080,
 					SWP_NOZORDER | SWP_FRAMECHANGED);
 			}
 		}
@@ -1339,7 +1341,7 @@ void display(void)
 	// blur the bright fragments
 	glUseProgram(gBlurShader);
 	glBindVertexArray(vaoQuad);
-	unsigned int amount = 20;
+	unsigned int amount = 10;
 	bool horizontal = true, first_iter = true;
 	for (unsigned int i = 0; i < amount; i++)
 	{
@@ -1366,6 +1368,8 @@ void display(void)
 	glBindTexture(GL_TEXTURE_2D, pingpongColorBuffers[!horizontal]);
 
 	glUniform1i(glGetUniformLocation(gFinalShader, "bloom"), bloom);
+	glUniform1i(glGetUniformLocation(gFinalShader, "scene"), 0);
+	glUniform1i(glGetUniformLocation(gFinalShader, "bloomBlur"), 1);
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
 	glBindVertexArray(0);
