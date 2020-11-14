@@ -883,7 +883,7 @@ int initialize(void)
 		"uniform sampler2D bloomBlur;\n" \
 
 		"uniform bool bloom = true;\n" \
-		"uniform float exposure = 1.0;\n" \
+		"uniform float exposure = 1.2;\n" \
 
 		"void main(void)" \
 		"{" \
@@ -1339,12 +1339,13 @@ void display(void)
 	// blur the bright fragments
 	glUseProgram(gBlurShader);
 	glBindVertexArray(vaoQuad);
-	unsigned int amount = 10;
+	unsigned int amount = 20;
 	bool horizontal = true, first_iter = true;
 	for (unsigned int i = 0; i < amount; i++)
 	{
 		glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[horizontal]);
 		glUniform1i(glGetUniformLocation(gBlurShader, "horizontal"), horizontal);
+		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, first_iter ? colorBuffers[1] : pingpongColorBuffers[!horizontal]);
 		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 		horizontal = !horizontal;
