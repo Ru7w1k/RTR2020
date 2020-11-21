@@ -1,0 +1,160 @@
+scene 1: 
+- monkey pulls a cart with donkey onboard
+- donkey is hitting monkey to make him pull the cart
+
+env: dense jungle and a mountains
+camera: starts with focus on monkey, then zoom out to show the cart and donkey
+music: donkey roars, hitting with stick, monkey shouts in pain
+
+
+scene 2: [cross fade]
+- monkey and donkey both are relaxing under a tree
+- donkey sleeps 
+- monkey sees something on the groud
+
+env: large tree, dense jungle in background, some grass near camera
+camera: steady on donkey and monkey
+music: donkey is chewing something
+
+
+scene 3: [cut]
+- monkey finds something on ground under leaves
+- he curiously picks up that blue mentos
+
+env: some leaves and mentos
+camera: closeup on ground centering on mentos
+music: curious theme, leaves moving
+
+
+scene 4: [cut]
+- monkey shows the mentos to donkey
+- donkey roars and shows that he is not interested in that thing
+
+env: large tree, dense jungle in background, some grass near camera
+camera: steady on donkey and monkey
+music: donkey saying "huh..", denial music theme
+
+scene 5: [cut]
+- monkey opens the wrapper and sniffs the mentos
+- monkey eats that and start chewing it
+- immidiately he feels something and starts walking
+
+env: jungle in backgroud
+camera: closeup on monkey's face
+music: monkey chewing mentos, chewing theme
+
+
+scene 6: [camera following monkey]
+- monkey starts walking
+- a deer is running at some distance
+- monkey approaches a tree while walking
+- monkey takes a branch from that tree
+- breaks excess branch from it to make it like an arrow/spear
+- monkey throws the spear in the direction of dear
+
+env: dense jungle, trees
+camera: following monkey in sliding manner
+music: chewing theme, spear throwing
+
+
+scene 7: [camera following wooden spear]
+- a deer is running in background
+- deer jumps into a small bush
+- at the same time wooden spear also enters the bush hitting that dear
+
+env: jungle, trees, bushes
+camera: following wooden spear
+music: chewing theme
+
+
+scene 8: [camera steady on bush]
+- monkey dives into the bush while looking at camera
+- and jumps out with wearing the skin on deer as cloths
+- monkey is slightly evolved now
+
+env: small bush, and jungle in backgroud
+camera: focusing on bush
+music: chewing theme, happy theme, monkey shouts "yaayy!"
+
+
+scene 9: [camera follows monkey]
+- monkey is still walking ahead
+- a cave appears
+- monkey enters into the cave
+
+env: jungle in backgroud, huge cave, some wild animals
+camera: following the monkey
+music: chewing theme
+
+
+scene 10: [fade out due to no light in cave]
+- monkey is walking ahead
+- he uses rocks to make fire
+- he is able to start fire, and uses a wooden stick as torch
+- that fire burns the whole monkey and evolves him further into man
+
+env: huge dark cave
+camera: following the monkey
+music: chewing theme, rocks hitting on each other, fire
+
+
+scene 11: [camera following man]
+- man is still walking ahead
+- he exits the cave by breaking some rocks
+- one of that rock starts rolling and forms the shape of wheel
+
+env: dark cave, huge dessert, Dinosaur skeleton
+camera: following man
+music: chewing theme, rocks sliding
+
+
+scene 12: [camera moves across a tree]
+- man enters the jungle again
+- the wheel is following man
+- donkey is still sleeping under the tree
+- man crosses the donkey
+- wheel stops rolling after it hits the donkey and falls there
+- donkey wakes up due to the wheel and looks at the man
+
+env: dense jungle, mountains
+camera: follows the man, and stops when the donkey enters the scene
+music: chewing theme
+
+
+scene 13: [cut]
+- man walks backwards towards the donkey
+- he calls the donkey "daddu?"
+
+env: dense jungle, mountains
+camera: steady on the donkey, then close up on man's face
+music: chewing theme fades out, "daddu?"
+
+
+scene 14: [cut]
+- donkey is chewing grass
+- donkey is shocked by looking at monkey who is now an evolved man
+- donkey drops the grass from his mouth
+
+env: dense jungle, mountains
+camera: steady on the donkey, then close up on man's face
+music: chewing theme fades out, man asks "daddu?", donkey surprised "haaink!?"
+
+
+scene 15: [cut]
+- donkey pulls a cart with man onboard
+- man is hitting donkey to make him pull the cart
+- donkey stops to look at the wrapper on ground
+
+env: dense jungle and a mountains
+camera: starts with focus on donkey, then zoom out to show the cart and man
+music: hitting with stick, donkey shouts in pain, chewing theme 
+
+
+scene 16: [cut]
+- montos wrapper lying on groud
+- donkey takes a closer look at it
+- and starts pulling the cart again as man hits with the stick
+
+env: jungle
+camera: clouse up on mentos wrapper, and then back to man and donkey
+music: hitting with stick, donkey shouts in pain, narrator: "Mentos..dimag ki batti jala de!"
