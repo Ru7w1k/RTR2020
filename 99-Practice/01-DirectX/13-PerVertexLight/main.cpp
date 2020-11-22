@@ -8,24 +8,19 @@
 
 #pragma warning(disable:4838)
 #include "XNAMath\xnamath.h"
-#include "WICTextureLoader.h"
 
 #include "main.h"
+#include "sphere.h"
 
 // linker commands
 #pragma comment(lib, "shcore.lib")
+#pragma comment(lib, "sphere.lib")
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "d3dcompiler.lib")
-#pragma comment(lib, "DirectXTK.lib")
 
 // macros
 #define WIN_WIDTH  800
 #define WIN_HEIGHT 600
-
-#define CHECK_IMG_WIDTH  256
-#define CHECK_IMG_HEIGHT 256
-
-using namespace DirectX;
 
 // global function declarations
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -54,7 +49,8 @@ ID3D11VertexShader *gpID3D11VertexShader = NULL;
 ID3D11PixelShader *gpID3D11PixelShader = NULL;
 
 ID3D11Buffer *gpID3D11Buffer_VertexBuffer_Position = NULL;
-ID3D11Buffer *gpID3D11Buffer_VertexBuffer_Texture = NULL;
+ID3D11Buffer *gpID3D11Buffer_VertexBuffer_Normal = NULL;
+ID3D11Buffer *gpID3D11Buffer_IndexBuffer = NULL;
 
 ID3D11InputLayout *gpID3D11InputLayout = NULL;
 ID3D11Buffer *gpID3D11Buffer_ConstantBuffer = NULL;
@@ -62,18 +58,46 @@ ID3D11Buffer *gpID3D11Buffer_ConstantBuffer = NULL;
 ID3D11RasterizerState *gpID3D11RasterizerState = NULL;
 ID3D11DepthStencilView *gpID3D11DepthStencilView = NULL;
 
-ID3D11ShaderResourceView *gpID3D11ShaderResourceView_Texture = NULL;
-ID3D11SamplerState *gpID3D11SamplerState_Texture = NULL;
+float sphere_vertices[1146];
+float sphere_normals[1146];
+float sphere_textures[746];
+unsigned short sphere_elements[2280];
+unsigned int gNumElements;
+unsigned int gNumVertices;
 
 // uniforms
 struct CBUFFER
 {
-	XMMATRIX WorldViewProjectionMatrix;
+	XMMATRIX WorldMatrix;
+	XMMATRIX ViewMatrix;
+	XMMATRIX ProjectionMatrix;
+
+	XMVECTOR La;
+	XMVECTOR Ld;
+	XMVECTOR Ls;
+	XMVECTOR LightPosition;
+
+	XMVECTOR Ka;
+	XMVECTOR Kd;
+	XMVECTOR Ks;
+	float Material_Shininess;
+
+	unsigned int KeyPressed;
+
 };
 
 XMMATRIX gPerspectiveProjectionMatrix;
+bool bLight = false;
 
-unsigned char CheckData[CHECK_IMG_WIDTH][CHECK_IMG_HEIGHT][4];
+float lightAmbient[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+float lightDiffuse[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+float lightSpecular[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+float lightPosition[4] = { 100.0f, 100.0f, -100.0f, 1.0f };
+
+float materialAmbient[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+float materialDiffuse[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+float materialSpecular[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+float materialShininess = 128.0f;
 
 // WinMain
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLine, int iCmdShow)
@@ -104,7 +128,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 		fclose(gpFile);
 	}
 
-	// set process dpi aware for high dpi monitors
+	// set DPI awareness for scaling
 	SetProcessDpiAwareness(PROCESS_SYSTEM_DPI_AWARE);
 
 	// initialization of WNDCLASSEX
@@ -130,7 +154,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 
 	// create window
 	hwnd = CreateWindow(szClassName,
-		TEXT("DirectX | Checkerboard"),
+		TEXT("DirectX | Per Vertex Light"),
 		WS_OVERLAPPEDWINDOW,
 		(width / 2) - (WIN_WIDTH/2),
 		(height / 2) - (WIN_HEIGHT/2),
@@ -236,6 +260,16 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 		}
 		break;
 
+	case WM_CHAR:
+		switch (wParam)
+		{
+			case 'L':
+			case 'l':
+				bLight = !bLight;
+				break;
+		}
+		break;
+
 	case WM_KEYDOWN:
 		switch (wParam)
 		{
@@ -309,10 +343,8 @@ void ToggleFullScreen(void)
 HRESULT initialize(void)
 {
 	// function declarations
-	HRESULT LoadD3DTexture(const wchar_t*, ID3D11ShaderResourceView **);
 	void uninitialize(void);
 	HRESULT resize(int, int);
-	void MakeCheckImage(void);
 
 	// variable declarations
 	HRESULT hr;
@@ -399,24 +431,66 @@ HRESULT initialize(void)
 
 	//// vertex shader ////////////////////////////////////////////////////////////
 	const char *vertexShaderSourceCode =
-		"cbuffer ConstantBuffer                                               \n" \
-		"{                                                                    \n" \
-		"	float4x4 worldViewProjectionMatrix;                               \n" \
-		"}                                                                    \n" \
-		"                                                                     \n" \
-		"struct vertex_output                                                 \n" \
-		"{                                                                    \n" \
-		"	float4 position: SV_POSITION;                                     \n" \
-		"	float2 texcoord: TEXCOORD;                                        \n" \
-		"};                                                                   \n" \
-		"                                                                     \n" \
-		"vertex_output main(float4 pos: POSITION, float2 texcoord: TEXCOORD)  \n" \
-		"{                                                                    \n" \
-		"	vertex_output output;                                             \n" \
-		"	output.position = mul(worldViewProjectionMatrix, pos);            \n" \
-		"	output.texcoord = texcoord;                                       \n" \
-		"	return(output);                                                   \n" \
-		"}                                                                    \n";
+		"cbuffer ConstantBuffer                                                               \n" \
+		"{                                                                                    \n" \
+		"	float4x4 worldMatrix;                                                             \n" \
+		"	float4x4 viewMatrix;                                                              \n" \
+		"	float4x4 projectionMatrix;                                                        \n" \
+		"                                                                                     \n" \
+		"	float4   la;                                                                      \n" \
+		"	float4   ld;                                                                      \n" \
+		"	float4   ls;                                                                      \n" \
+		"	float4   lightPosition;                                                           \n" \
+		"                                                                                     \n" \
+		"                                                                                     \n" \
+		"	float4   ka;                                                                      \n" \
+		"	float4   kd;                                                                      \n" \
+		"	float4   ks;                                                                      \n" \
+		"	float    material_shininess;                                                      \n" \
+		"                                                                                     \n" \
+		"	uint     keyPressed;                                                              \n" \
+		"}                                                                                    \n" \
+		"                                                                                     \n" \
+		"struct vertex_output                                                                 \n" \
+		"{                                                                                    \n" \
+		"	float4 position        : SV_POSITION;                                             \n" \
+		"	float4 phong_ads_color : COLOR;                                                   \n" \
+		"};                                                                                   \n" \
+		"                                                                                     \n" \
+		"vertex_output main(float4 pos: POSITION, float4 normal: NORMAL)                      \n" \
+		"{                                                                                    \n" \
+		"	vertex_output output;                                                             \n" \
+		"                                                                                     \n" \
+		"   if (keyPressed == 1)                                                              \n" \
+		"   {                                                                                 \n" \
+		"       float4 eyeCoordinate = mul(worldMatrix, pos);                                 \n" \
+		"       eyeCoordinate = mul(viewMatrix, eyeCoordinate);                               \n" \
+		"       float3 tnorm = normalize(mul((float3x3)worldMatrix, (float3)normal));         \n" \
+		"       float3 light_direction = (float3)normalize(lightPosition - eyeCoordinate);   \n" \
+		"       float tn_dot_ld = max(dot(tnorm, light_direction), 0.0);                      \n" \
+		"                                                                                     \n" \
+		"       float4 ambient = la * ka;                                                     \n" \
+		"       float4 diffuse = ld * kd * tn_dot_ld;                                         \n" \
+		"                                                                                     \n" \
+		"       float3 reflection_vector = reflect(-light_direction, tnorm);                  \n" \
+		"       float3 viewer_vector = normalize(-eyeCoordinate.xyz);                         \n" \
+		"                                                                                     \n" \
+		"       float4 specular = ls * ks * pow(max(dot(reflection_vector, viewer_vector), 0.0), material_shininess); \n" \
+		"       output.phong_ads_color = ambient + diffuse + specular;                        \n" \
+		"   }                                                                                 \n" \
+		"                                                                                     \n" \
+		"   else                                                                              \n" \
+		"   {                                                                                 \n" \
+		"       output.phong_ads_color = float4(1.0, 1.0, 1.0, 1.0);                          \n" \
+		"   }                                                                                 \n" \
+		"                                                                                     \n" \
+		"	float4 position = mul(worldMatrix, pos);                                          \n" \
+		"	position = mul(viewMatrix, position);                                             \n" \
+		"	position = mul(projectionMatrix, position);                                       \n" \
+		"	output.position = position;                                                       \n" \
+		"                                                                                     \n" \
+		"	return(output);                                                                   \n" \
+		"}                                                                                    \n";
 
 	ID3DBlob *pID3DBlob_VertexShaderCode = NULL;
 	ID3DBlob *pID3DBlob_Error = NULL;
@@ -471,14 +545,11 @@ HRESULT initialize(void)
 	
 	//// pixel shader /////////////////////////////////////////////////////////////
 	const char *pixelShaderSourceCode =
-		"Texture2D myTexture2D;                                                     \n" \
-		"SamplerState mySamplerState;                                               \n" \
-		"                                                                           \n" \
-		"float4 main(float4 pos: SV_POSITION, float2 texcoord: TEXCOORD): SV_TARGET \n" \
-		"{                                                                          \n" \
-		"	float4 color = myTexture2D.Sample(mySamplerState, texcoord);            \n" \
-		"	return(color);                                                          \n" \
-		"}                                                                          \n";
+		"float4 main(float4 pos: SV_POSITION, float4 phong_ads_color: COLOR): SV_TARGET       \n" \
+		"{                                                                                    \n" \
+		"	float4 color = phong_ads_color;                                                   \n" \
+		"	return(color);                                                                    \n" \
+		"}                                                                                    \n";
 
 	ID3DBlob *pID3DBlob_PixelShaderCode = NULL;
 
@@ -542,12 +613,12 @@ HRESULT initialize(void)
 	inputElementDesc[0].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
 	inputElementDesc[0].InstanceDataStepRate = 0;
 
-	// texture data
-	inputElementDesc[1].SemanticName = "TEXCOORD";
+	// normal data
+	inputElementDesc[1].SemanticName = "NORMAL";
 	inputElementDesc[1].SemanticIndex = 0;
-	inputElementDesc[1].Format = DXGI_FORMAT_R32G32_FLOAT;
+	inputElementDesc[1].Format = DXGI_FORMAT_R32G32B32_FLOAT;
 	inputElementDesc[1].InputSlot = 1;
-	inputElementDesc[1].AlignedByteOffset = 0;
+	inputElementDesc[1].AlignedByteOffset = D3D11_APPEND_ALIGNED_ELEMENT;
 	inputElementDesc[1].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
 	inputElementDesc[1].InstanceDataStepRate = 0;
 
@@ -575,52 +646,18 @@ HRESULT initialize(void)
 	///////////////////////////////////////////////////////////////////////////////
 
 	//// vertex data //////////////////////////////////////////////////////////////
-
-	float vertices[] =
-	{
-		-2.0f,  1.0f,  0.0f,
-		 0.0f,  1.0f,  0.0f,
-		-2.0f, -1.0f,  0.0f,
-
-		-2.0f, -1.0f,  0.0f,
-		 0.0f,  1.0f,  0.0f,
-		 0.0f, -1.0f,  0.0f,
-
-		 1.0f,      1.0f,  0.0f,
-		 2.41421f,  1.0f,  1.41421f,
-		 1.0f,     -1.0f,  0.0f,
-
-		 1.0f,     -1.0f,   0.0f,
-		 2.41421f,  1.0f,   1.41421f,
-		 2.41421f, -1.0f,   1.41421f,
-	};
-
-	float texcoords[] =
-	{
-		 0.0f,  1.0f,
-		 1.0f,  1.0f,
-		 0.0f,  0.0f,
-
-		 0.0f,  0.0f,
-		 1.0f,  1.0f,
-		 1.0f,  0.0f,
-
-		 0.0f,  1.0f,
-		 1.0f,  1.0f,
-		 0.0f,  0.0f,
-
-		 0.0f,  0.0f,
-		 1.0f,  1.0f,
-		 1.0f,  0.0f,
-	};	
+	
+	getSphereVertexData(sphere_vertices, sphere_normals, sphere_textures, sphere_elements);
+	gNumVertices = getNumberOfSphereVertices();
+	gNumElements = getNumberOfSphereElements();
 
 	///////////////////////////////////////////////////////////////////////////////
 
-	// create vertex buffer for position quads
+	// create vertex buffer for position sphere
 	D3D11_BUFFER_DESC bufferDesc_VertexBuffer;
 	ZeroMemory(&bufferDesc_VertexBuffer, sizeof(D3D11_BUFFER_DESC));
 	bufferDesc_VertexBuffer.Usage = D3D11_USAGE_DYNAMIC;
-	bufferDesc_VertexBuffer.ByteWidth = sizeof(float) * ARRAYSIZE(vertices);
+	bufferDesc_VertexBuffer.ByteWidth = sizeof(float) * ARRAYSIZE(sphere_vertices);
 	bufferDesc_VertexBuffer.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	bufferDesc_VertexBuffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
@@ -635,40 +672,67 @@ HRESULT initialize(void)
 		Log("ID3D11Device::CreateBuffer() succeeded for vertex buffer position..\n");
 	}
 
-	// copy vertices into above buffer
+	// copy sphere_vertices into above buffer
 	D3D11_MAPPED_SUBRESOURCE mappedSubresource;
 	ZeroMemory(&mappedSubresource, sizeof(D3D11_MAPPED_SUBRESOURCE));
 	gpID3D11DeviceContext->Map(gpID3D11Buffer_VertexBuffer_Position, 0,
 		D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
-	memcpy(mappedSubresource.pData, vertices, sizeof(vertices));
+	memcpy(mappedSubresource.pData, sphere_vertices, sizeof(sphere_vertices));
 	gpID3D11DeviceContext->Unmap(gpID3D11Buffer_VertexBuffer_Position, NULL);
 
 	///////////////////////////////////////////////////////////////////////////////
 
-	// create vertex buffer for color pyramid
+	// create vertex buffer for normal sphere
 	ZeroMemory(&bufferDesc_VertexBuffer, sizeof(D3D11_BUFFER_DESC));
 	bufferDesc_VertexBuffer.Usage = D3D11_USAGE_DYNAMIC;
-	bufferDesc_VertexBuffer.ByteWidth = sizeof(float) * ARRAYSIZE(texcoords);
+	bufferDesc_VertexBuffer.ByteWidth = sizeof(float) * ARRAYSIZE(sphere_normals);
 	bufferDesc_VertexBuffer.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	bufferDesc_VertexBuffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
-	hr = gpID3D11Device->CreateBuffer(&bufferDesc_VertexBuffer, NULL, &gpID3D11Buffer_VertexBuffer_Texture);
+	hr = gpID3D11Device->CreateBuffer(&bufferDesc_VertexBuffer, NULL, &gpID3D11Buffer_VertexBuffer_Normal);
 	if (FAILED(hr))
 	{
-		Log("ID3D11Device::CreateBuffer() failed for vertex buffer color..\n");
+		Log("ID3D11Device::CreateBuffer() failed for vertex buffer normal..\n");
 		return(hr);
 	}
 	else
 	{
-		Log("ID3D11Device::CreateBuffer() succeeded for vertex buffer color..\n");
+		Log("ID3D11Device::CreateBuffer() succeeded for vertex buffer normal..\n");
 	}
 
-	// copy texcoords into above buffer
+	// copy sphere_normals into above buffer
 	ZeroMemory(&mappedSubresource, sizeof(D3D11_MAPPED_SUBRESOURCE));
-	gpID3D11DeviceContext->Map(gpID3D11Buffer_VertexBuffer_Texture, 0,
+	gpID3D11DeviceContext->Map(gpID3D11Buffer_VertexBuffer_Normal, 0,
 		D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
-	memcpy(mappedSubresource.pData, texcoords, sizeof(texcoords));
-	gpID3D11DeviceContext->Unmap(gpID3D11Buffer_VertexBuffer_Texture, NULL);
+	memcpy(mappedSubresource.pData, sphere_normals, sizeof(sphere_normals));
+	gpID3D11DeviceContext->Unmap(gpID3D11Buffer_VertexBuffer_Normal, NULL);
+
+	///////////////////////////////////////////////////////////////////////////////
+
+	// create vertex buffer for index sphere
+	ZeroMemory(&bufferDesc_VertexBuffer, sizeof(D3D11_BUFFER_DESC));
+	bufferDesc_VertexBuffer.Usage = D3D11_USAGE_DYNAMIC;
+	bufferDesc_VertexBuffer.ByteWidth = sizeof(short) * gNumElements;
+	bufferDesc_VertexBuffer.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	bufferDesc_VertexBuffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+	hr = gpID3D11Device->CreateBuffer(&bufferDesc_VertexBuffer, NULL, &gpID3D11Buffer_IndexBuffer);
+	if (FAILED(hr))
+	{
+		Log("ID3D11Device::CreateBuffer() failed for index buffer..\n");
+		return(hr);
+	}
+	else
+	{
+		Log("ID3D11Device::CreateBuffer() succeeded for index buffer..\n");
+	}
+
+	// copy sphere_elements into above buffer
+	ZeroMemory(&mappedSubresource, sizeof(D3D11_MAPPED_SUBRESOURCE));
+	gpID3D11DeviceContext->Map(gpID3D11Buffer_IndexBuffer, 0,
+		D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
+	memcpy(mappedSubresource.pData, sphere_elements, sizeof(sphere_elements));
+	gpID3D11DeviceContext->Unmap(gpID3D11Buffer_IndexBuffer, NULL);
 
 	///////////////////////////////////////////////////////////////////////////////
 
@@ -727,76 +791,6 @@ HRESULT initialize(void)
 
 	///////////////////////////////////////////////////////////////////////////////
 
-	//// texture //////////////////////////////////////////////////////////////////
-
-	D3D11_TEXTURE2D_DESC textureDesc;
-	ZeroMemory(&textureDesc, sizeof(D3D11_TEXTURE2D_DESC));
-	textureDesc.Width = (UINT)CHECK_IMG_WIDTH;
-	textureDesc.Height = (UINT)CHECK_IMG_HEIGHT;
-	textureDesc.ArraySize = 1;
-	textureDesc.MipLevels = 1;
-	textureDesc.SampleDesc.Count = 1; // this can be upto 4
-	textureDesc.SampleDesc.Quality = 0; // if above is 4, then this is 1
-	textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	textureDesc.Usage = D3D11_USAGE_DYNAMIC;
-	textureDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-	textureDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-	textureDesc.MiscFlags = 0;
-
-	ID3D11Texture2D *pID3D11Texture2D_Checkerboard;
-	hr = gpID3D11Device->CreateTexture2D(&textureDesc, NULL, &pID3D11Texture2D_Checkerboard);
-
-	// generate texture
-	MakeCheckImage();
-
-	// copy texture data into above buffer
-	ZeroMemory(&mappedSubresource, sizeof(D3D11_MAPPED_SUBRESOURCE));
-	hr = gpID3D11DeviceContext->Map(pID3D11Texture2D_Checkerboard, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
-	memcpy(mappedSubresource.pData, CheckData, sizeof(CheckData));
-	gpID3D11DeviceContext->Unmap(pID3D11Texture2D_Checkerboard, NULL);
-
-	// create shader resource view for the generated texture
-	D3D11_SHADER_RESOURCE_VIEW_DESC SRVDesc;
-	ZeroMemory(&SRVDesc, sizeof(D3D11_SHADER_RESOURCE_VIEW_DESC));
-	SRVDesc.Format = textureDesc.Format;
-	SRVDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-	SRVDesc.Texture2D.MipLevels = 1;
-
-	hr = gpID3D11Device->CreateShaderResourceView(pID3D11Texture2D_Checkerboard, &SRVDesc, &gpID3D11ShaderResourceView_Texture);
-	if (FAILED(hr))
-	{
-		Log("ID3D11Device::CreateShaderResourveView() failed for checkerboard");
-		return(hr);
-	}
-	else
-	{
-		Log("ID3D11Device::CreateShaderResourveView() succeeded for checkerboard");
-	}
-
-	pID3D11Texture2D_Checkerboard->Release();
-	pID3D11Texture2D_Checkerboard = NULL;
-	
-	// create sampler state
-	D3D11_SAMPLER_DESC samplerDesc;
-	ZeroMemory(&samplerDesc, sizeof(D3D11_SAMPLER_DESC));
-	samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
-	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
-	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
-
-	hr = gpID3D11Device->CreateSamplerState(&samplerDesc, &gpID3D11SamplerState_Texture);
-	if (FAILED(hr))
-	{
-		Log("ID3D11Device::CreateSamplerState() failed for checkerboard texture");
-		return(hr);
-	}
-	else
-	{
-		Log("ID3D11Device::CreateSamplerState() succeeded for checkerboard texture");
-	}
-
-	///////////////////////////////////////////////////////////////////////////////
-
 	// d3d clear color
 	gClearColor[0] = 0.0f;
 	gClearColor[1] = 0.0f;
@@ -832,7 +826,6 @@ HRESULT resize(int width, int height)
 		gpID3D11DepthStencilView->Release();
 		gpID3D11DepthStencilView = NULL;
 	}
-
 	if (gpID3D11RenderTargetView)
 	{
 		gpID3D11RenderTargetView->Release();
@@ -931,7 +924,7 @@ void display(void)
 	gpID3D11DeviceContext->ClearRenderTargetView(gpID3D11RenderTargetView, gClearColor);
 	gpID3D11DeviceContext->ClearDepthStencilView(gpID3D11DepthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
-	//// rectangle ////////////////////////////////////////////////////////////////////
+	//// sphere ////////////////////////////////////////////////////////////////////
 
 	// select which vertex buffer to display
 	// position buffer
@@ -939,14 +932,13 @@ void display(void)
 	UINT offset = 0;
 	gpID3D11DeviceContext->IASetVertexBuffers(0, 1, &gpID3D11Buffer_VertexBuffer_Position, &stride, &offset);
 
-	// texcoords buffer
-	stride = sizeof(float) * 2;
+	// normal buffer
+	stride = sizeof(float) * 3;
 	offset = 0;
-	gpID3D11DeviceContext->IASetVertexBuffers(1, 1, &gpID3D11Buffer_VertexBuffer_Texture, &stride, &offset);
+	gpID3D11DeviceContext->IASetVertexBuffers(1, 1, &gpID3D11Buffer_VertexBuffer_Normal, &stride, &offset);
 
-	// bind texture and sampler as pixel shader resource
-	gpID3D11DeviceContext->PSSetShaderResources(0, 1, &gpID3D11ShaderResourceView_Texture);
-	gpID3D11DeviceContext->PSSetSamplers(0, 1, &gpID3D11SamplerState_Texture);
+	// index buffer
+	gpID3D11DeviceContext->IASetIndexBuffer(gpID3D11Buffer_IndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
 	// select geometry primitive
 	gpID3D11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -955,25 +947,42 @@ void display(void)
 	XMMATRIX worldMatrix = XMMatrixIdentity();
 	XMMATRIX viewMatrix = XMMatrixIdentity();
 	XMMATRIX translationMatrix = XMMatrixIdentity();
-	XMMATRIX rotationMatrix = XMMatrixIdentity();
 
 	// translation
-	translationMatrix = XMMatrixTranslation(0.0f, 0.0f, 3.6f);
+	translationMatrix = XMMatrixTranslation(0.0f, 0.0f, 4.0f);
 
 	// this order of multiplication is important!
-	worldMatrix = rotationMatrix * translationMatrix;
-
-	// final WorldViewProjection matrix
-	XMMATRIX wvpMatrix = worldMatrix  *viewMatrix  *gPerspectiveProjectionMatrix;
+	worldMatrix = translationMatrix;
 
 	// load the data into the constant buffer
 	CBUFFER constantBuffer;
 	ZeroMemory(&constantBuffer, sizeof(CBUFFER));
-	constantBuffer.WorldViewProjectionMatrix = wvpMatrix;
+	constantBuffer.WorldMatrix = worldMatrix;
+	constantBuffer.ViewMatrix = viewMatrix;
+	constantBuffer.ProjectionMatrix = gPerspectiveProjectionMatrix;
+	if (bLight)
+	{
+		constantBuffer.KeyPressed = 1;
+
+		constantBuffer.La = XMVectorSet(lightAmbient[0], lightAmbient[1], lightAmbient[2], lightAmbient[3]);
+		constantBuffer.Ld = XMVectorSet(lightDiffuse[0], lightDiffuse[1], lightDiffuse[2], lightDiffuse[3]);
+		constantBuffer.Ls = XMVectorSet(lightSpecular[0], lightSpecular[1], lightSpecular[2], lightSpecular[3]);
+		constantBuffer.LightPosition = XMVectorSet(lightPosition[0], lightPosition[1], lightPosition[2], lightPosition[3]);
+
+		constantBuffer.Ka = XMVectorSet(materialAmbient[0], materialAmbient[1], materialAmbient[2], materialAmbient[3]);
+		constantBuffer.Kd = XMVectorSet(materialDiffuse[0], materialDiffuse[1], materialDiffuse[2], materialDiffuse[3]);
+		constantBuffer.Ks = XMVectorSet(materialSpecular[0], materialSpecular[1], materialSpecular[2], materialSpecular[3]);
+		constantBuffer.Material_Shininess = materialShininess;
+	}
+	else
+	{
+		constantBuffer.KeyPressed = 0;
+	}
+
 	gpID3D11DeviceContext->UpdateSubresource(gpID3D11Buffer_ConstantBuffer, 0, NULL, &constantBuffer, 0, 0);
 
 	// draw vertex buffer to render target
-	gpID3D11DeviceContext->Draw(12, 0);
+	gpID3D11DeviceContext->DrawIndexed(gNumElements, 0, 0);
 
 	///////////////////////////////////////////////////////////////////////////////
 
@@ -983,25 +992,12 @@ void display(void)
 
 void update(void)
 {
-	// code
 
 }
 
 void uninitialize(void)
 {
 	// code
-	if (gpID3D11SamplerState_Texture)
-	{
-		gpID3D11SamplerState_Texture->Release();
-		gpID3D11SamplerState_Texture = NULL;
-	}
-
-	if (gpID3D11ShaderResourceView_Texture)
-	{
-		gpID3D11ShaderResourceView_Texture->Release();
-		gpID3D11ShaderResourceView_Texture = NULL;
-	}
-	
 	if (gpID3D11Buffer_ConstantBuffer)
 	{
 		gpID3D11Buffer_ConstantBuffer->Release();
@@ -1014,16 +1010,22 @@ void uninitialize(void)
 		gpID3D11InputLayout = NULL;
 	}
 
-	if (gpID3D11Buffer_VertexBuffer_Texture)
+	if (gpID3D11Buffer_VertexBuffer_Normal)
 	{
-		gpID3D11Buffer_VertexBuffer_Texture->Release();
-		gpID3D11Buffer_VertexBuffer_Texture = NULL;
+		gpID3D11Buffer_VertexBuffer_Normal->Release();
+		gpID3D11Buffer_VertexBuffer_Normal = NULL;
 	}
 
 	if (gpID3D11Buffer_VertexBuffer_Position)
 	{
 		gpID3D11Buffer_VertexBuffer_Position->Release();
 		gpID3D11Buffer_VertexBuffer_Position = NULL;
+	}
+
+	if (gpID3D11Buffer_IndexBuffer)
+	{
+		gpID3D11Buffer_IndexBuffer->Release();
+		gpID3D11Buffer_IndexBuffer = NULL;
 	}
 
 	if (gpID3D11PixelShader)
@@ -1077,30 +1079,9 @@ void uninitialize(void)
 	}
 }
 
-void MakeCheckImage(void)
-{
-	int i, j;
-	unsigned char c;
-
-	for (i = 0; i < CHECK_IMG_WIDTH; i++)
-	{
-		for (j = 0; j < CHECK_IMG_HEIGHT; j++)
-		{
-			c = (((i & 32) == 0) ^ ((j & 32) == 0)) * 255;
-
-			CheckData[i][j][0] = (unsigned char) c;
-			CheckData[i][j][1] = (unsigned char) c;
-			CheckData[i][j][2] = (unsigned char) c;
-			CheckData[i][j][3] = (unsigned char) 255;
-
-		}
-	}
-}
-
 void Log(const char *str)
 {
 	fopen_s(&gpFile, gszLogFile, "a+");
-	fprintf_s(gpFile, "%s:%d", __FILE__, __LINE__);
 	fprintf_s(gpFile, str);
 	fclose(gpFile);
 }

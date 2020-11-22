@@ -1,21 +1,27 @@
 Log.txt file created..
-main.cpp:1100D3D11CreateDeviceAndSwapChain() succeeded..
-main.cpp:1100The chosen driver is of: main.cpp:1100Hardware Type. 
-main.cpp:1100The supported highest feature level is: main.cpp:110011.0 
-main.cpp:1100D3DCompile() successful for Vertex Shader()..
-main.cpp:1100ID3D11Device::CreateVertexShader() succeeded..
-main.cpp:1100D3DCompile() successful for Pixel Shader()..
-main.cpp:1100ID3D11Device::CreatePixelShader() succeeded..
-main.cpp:1100ID3D11Device::CreateInputLayout() succeeded..
-main.cpp:1100ID3D11Device::CreateBuffer() succeeded for vertex buffer position..
-main.cpp:1100ID3D11Device::CreateBuffer() succeeded for vertex buffer color..
-main.cpp:1100ID3D11Device::CreateBuffer() succeeded for constant buffer..
-main.cpp:1100ID3D11Device::CreateRasterizerState() succeeded..
-main.cpp:1100ID3D11Device::CreateShaderResourveView() succeeded for checkerboardmain.cpp:1100ID3D11Device::CreateSamplerState() succeeded for checkerboard texturemain.cpp:1100ID3D11Device::CreateRenderTargerView() succeeded..
-main.cpp:1100ID3D11::CreateDepthStencilView() succeeded..
-main.cpp:1100resize() succeeded..
-main.cpp:1100Initialize() successful!
-main.cpp:1100Uninitialize() succeeded..
-main.cpp:1100Log file closed..
-main.cpp:1100Uninitialize() succeeded..
-main.cpp:1100Log file closed..
+main.cpp:1103D3D11CreateDeviceAndSwapChain() succeeded..
+main.cpp:1103The chosen driver is of: main.cpp:1103Hardware Type. 
+main.cpp:1103The supported highest feature level is: main.cpp:110311.0 
+main.cpp:1103D3DCompile() successful for Vertex Shader()..
+main.cpp:1103ID3D11Device::CreateVertexShader() succeeded..
+main.cpp:1103D3DCompile() successful for Pixel Shader()..
+main.cpp:1103ID3D11Device::CreatePixelShader() succeeded..
+main.cpp:1103ID3D11Device::CreateInputLayout() succeeded..
+main.cpp:1103ID3D11Device::CreateBuffer() succeeded for vertex buffer position..
+main.cpp:1103ID3D11Device::CreateBuffer() succeeded for vertex buffer color..
+main.cpp:1103ID3D11Device::CreateBuffer() succeeded for constant buffer..
+main.cpp:1103ID3D11Device::CreateRasterizerState() succeeded..
+main.cpp:1103ID3D11Device::CreateShaderResourveView() succeeded for checkerboardmain.cpp:1103ID3D11Device::CreateSamplerState() succeeded for checkerboard texturemain.cpp:1103ID3D11Device::CreateRenderTargerView() succeeded..
+main.cpp:1103ID3D11::CreateDepthStencilView() succeeded..
+main.cpp:1103resize() succeeded..
+main.cpp:1103Initialize() successful!
+main.cpp:1103ID3D11Device::CreateRenderTargerView() succeeded..
+main.cpp:1103ID3D11::CreateDepthStencilView() succeeded..
+main.cpp:1103resize() succeeded!
+main.cpp:1103ID3D11Device::CreateRenderTargerView() succeeded..
+main.cpp:1103ID3D11::CreateDepthStencilView() succeeded..
+main.cpp:1103resize() succeeded!
+main.cpp:1103Uninitialize() succeeded..
+main.cpp:1103Log file closed..
+main.cpp:1103Uninitialize() succeeded..
+main.cpp:1103Log file closed..
