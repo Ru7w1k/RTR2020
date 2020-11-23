@@ -990,6 +990,17 @@ HRESULT initialize(void)
 		Log("ID3D11Device::CreateSamplerState() succeeded..\n");
 	}
 
+    // sampler state for framebuffer
+	hr = gpID3D11Device->CreateSamplerState(&samplerDesc, &gpID3D11SamplerState_framebuffer);
+	if (FAILED(hr))
+	{
+		Log("ID3D11Device::CreateSamplerState() failed..\n");
+	}
+	else 
+	{
+		Log("ID3D11Device::CreateSamplerState() succeeded..\n");
+	}
+
 	///////////////////////////////////////////////////////////////////////////////
 
 	// d3d clear color
@@ -1084,15 +1095,8 @@ HRESULT resize(int width, int height)
 	ID3D11Texture2D *pFramebufferTexture;
 	gpID3D11Device->CreateTexture2D(&textureDesc, NULL, &pFramebufferTexture);
 
-	// create new render target view from framebuffer
-	D3D11_RENDER_TARGET_VIEW_DESC RTVDesc;
-	ZeroMemory(&RTVDesc, sizeof(D3D11_RENDER_TARGET_VIEW_DESC));
-	RTVDesc.Format = textureDesc.Format;
-	RTVDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-	RTVDesc.Texture2D.MipSlice = 0;
-
-
-	hr = gpID3D11Device->CreateRenderTargetView(pFramebufferTexture, &RTVDesc, &gpID3D11RenderTargetView_framebuffer);
+	// create new render target view 
+	hr = gpID3D11Device->CreateRenderTargetView(pFramebufferTexture, NULL, &gpID3D11RenderTargetView_framebuffer);
 	if (FAILED(hr))
 	{
 		Log("ID3D11Device::CreateRenderTargetView() failed for framebuffer..\n");
