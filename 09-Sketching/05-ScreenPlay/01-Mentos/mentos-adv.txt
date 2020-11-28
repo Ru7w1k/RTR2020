@@ -2,7 +2,7 @@ scene 1:
 - monkey pulls a cart with donkey onboard
 - donkey is hitting monkey to make him pull the cart
 
-env: dense jungle and a mountains
+env: dense jungle and mountains
 camera: starts with focus on monkey, then zoom out to show the cart and donkey
 music: donkey roars, hitting with stick, monkey shouts in pain
 
