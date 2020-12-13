@@ -19,8 +19,8 @@
 #pragma comment(lib, "cudart.lib")
 
 // macros
-#define WIN_WIDTH  1920
-#define WIN_HEIGHT 1080
+#define WIN_WIDTH  800
+#define WIN_HEIGHT 600
 
 // global function declarations
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -57,8 +57,8 @@ ID3D11DepthStencilView *gpID3D11DepthStencilView = NULL;
 ID3D11Buffer *gpID3D11Buffer_VertexBuffer = NULL;
 ID3D11Buffer *gpID3D11Buffer_VertexBuffer_GPU = NULL;
 
-const int gMeshWidth = 1024;
-const int gMeshHeight = 1024;
+const int gMeshWidth = 2048;
+const int gMeshHeight = 2048;
 #define MY_ARRAY_SIZE gMeshWidth*gMeshHeight*4
 
 float pos[gMeshWidth][gMeshHeight][4];
@@ -72,7 +72,6 @@ cudaError_t error;
 struct CBUFFER
 {
 	XMMATRIX WorldViewProjectionMatrix;
-	XMVECTOR Color;
 };
 
 XMMATRIX gPerspectiveProjectionMatrix;
@@ -130,7 +129,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 
 	// create window
 	hwnd = CreateWindow(szClassName,
-		TEXT("DirectX | CUDA InterOp | CPU"),
+		TEXT("DirectX | CUDA InterOp"),
 		WS_OVERLAPPEDWINDOW,
 		(width / 2) - (WIN_WIDTH/2),
 		(height / 2) - (WIN_HEIGHT/2),
@@ -242,13 +241,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 			case 'G':
 			case 'g':
 				bOnGPU = true;
-				SetWindowText(ghwnd, TEXT("DirectX | CUDA InterOp | GPU"));
 				break;
 
 			case 'C':
 			case 'c':
 				bOnGPU = false;
-				SetWindowText(ghwnd, TEXT("DirectX | CUDA InterOp | CPU"));
 				break;
 		}
 		break;
@@ -447,7 +444,6 @@ HRESULT initialize(void)
 		"cbuffer ConstantBuffer                                         \n" \
 		"{                                                              \n" \
 		"	float4x4 worldViewProjectionMatrix;                         \n" \
-		"	float4   color;                                             \n" \
 		"}                                                              \n" \
 		"                                                               \n" \
 		"struct vertex_output                                           \n" \
@@ -455,7 +451,7 @@ HRESULT initialize(void)
 		"	float4 position: SV_POSITION;                               \n" \
 		"};                                                             \n" \
 		"                                                               \n" \
-		"vertex_output main(float4 pos: POSITION)  \n" \
+		"vertex_output main(float4 pos: POSITION)                       \n" \
 		"{                                                              \n" \
 		"	vertex_output output;                                       \n" \
 		"	output.position = mul(worldViewProjectionMatrix, pos);      \n" \
@@ -515,16 +511,10 @@ HRESULT initialize(void)
 	
 	//// pixel shader /////////////////////////////////////////////////////////////
 	const char *pixelShaderSourceCode =
-		"cbuffer ConstantBuffer                                         \n" \
-		"{                                                              \n" \
-		"	float4x4 worldViewProjectionMatrix;                         \n" \
-		"	float4   color;                                             \n" \
-		"}                                                              \n" \
-		"                                                               \n" \
-		"float4 main(float4 pos: SV_POSITION): SV_TARGET                \n" \
-		"{                                                              \n" \
-		"	return(color);                                              \n" \
-		"}                                                              \n";
+		"float4 main(float4 pos: SV_POSITION): SV_TARGET         \n" \
+		"{                                                       \n" \
+		"	return(float4(1.0, 1.0, 1.0, 1.0));                  \n" \
+		"}                                                       \n";
 
 	ID3DBlob *pID3DBlob_PixelShaderCode = NULL;
 
@@ -688,7 +678,6 @@ HRESULT initialize(void)
 	}
 
 	gpID3D11DeviceContext->VSSetConstantBuffers(0, 1, &gpID3D11Buffer_ConstantBuffer);
-	gpID3D11DeviceContext->PSSetConstantBuffers(0, 1, &gpID3D11Buffer_ConstantBuffer);
 
 	///////////////////////////////////////////////////////////////////////////////
 
@@ -875,7 +864,7 @@ void display(void)
 	CBUFFER constantBuffer;
 	ZeroMemory(&constantBuffer, sizeof(CBUFFER));
 	constantBuffer.WorldViewProjectionMatrix = wvpMatrix;
-	
+	gpID3D11DeviceContext->UpdateSubresource(gpID3D11Buffer_ConstantBuffer, 0, NULL, &constantBuffer, 0, 0);
 
 	// launch respective kernel
 	if (bOnGPU)
@@ -930,16 +919,12 @@ void display(void)
 	UINT offset = 0;
 	if (bOnGPU)
 	{
-		constantBuffer.Color = XMVectorSet(0.0f, 1.0f, 0.0f, 1.0f);
 		gpID3D11DeviceContext->IASetVertexBuffers(0, 1, &gpID3D11Buffer_VertexBuffer_GPU, &stride, &offset);
 	}
 	else
 	{
-		constantBuffer.Color = XMVectorSet(1.0f, 0.0f, 0.0f, 1.0f);
 		gpID3D11DeviceContext->IASetVertexBuffers(0, 1, &gpID3D11Buffer_VertexBuffer, &stride, &offset);
 	}
-
-	gpID3D11DeviceContext->UpdateSubresource(gpID3D11Buffer_ConstantBuffer, 0, NULL, &constantBuffer, 0, 0);
 
 	// draw vertex buffer to render target
 	gpID3D11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);

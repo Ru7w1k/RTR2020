@@ -442,7 +442,6 @@ HRESULT initialize(void)
 		"	float4   ls;                                                                      \n" \
 		"	float4   lightPosition;                                                           \n" \
 		"                                                                                     \n" \
-		"                                                                                     \n" \
 		"	float4   ka;                                                                      \n" \
 		"	float4   kd;                                                                      \n" \
 		"	float4   ks;                                                                      \n" \

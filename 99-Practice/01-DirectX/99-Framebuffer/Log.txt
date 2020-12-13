@@ -1,34 +1,32 @@
 Log.txt file created..
-main.cpp:1460 D3D11CreateDeviceAndSwapChain() succeeded..
-main.cpp:1460 The chosen driver is of: main.cpp:1460 Hardware Type. 
-main.cpp:1460 The supported highest feature level is: main.cpp:1460 11.0 
-main.cpp:1460 D3DCompile() successful for Vertex Shader()..
-main.cpp:1460 ID3D11Device::CreateVertexShader() succeeded..
-main.cpp:1460 D3DCompile() successful for Pixel Shader()..
-main.cpp:1460 ID3D11Device::CreatePixelShader() succeeded..
-main.cpp:1460 ID3D11Device::CreateInputLayout() succeeded..
-main.cpp:1460 ID3D11Device::CreateBuffer() succeeded for vertex buffer position..
-main.cpp:1460 ID3D11Device::CreateBuffer() succeeded for vertex buffer color..
-main.cpp:1460 ID3D11Device::CreateBuffer() succeeded for vertex buffer position..
-main.cpp:1460 ID3D11Device::CreateBuffer() succeeded for vertex buffer color..
-main.cpp:1460 ID3D11Device::CreateBuffer() succeeded for constant buffer..
-main.cpp:1460 ID3D11Device::CreateRasterizerState() succeeded..
-main.cpp:1460 DirectX::CreateWICTextureFromFile() succeeded..
-main.cpp:1460 LoadD3DTexture() succeeded..
-main.cpp:1460 ID3D11Device::CreateSamplerState() succeeded..
-main.cpp:1460 DirectX::CreateWICTextureFromFile() succeeded..
-main.cpp:1460 LoadD3DTexture() succeeded..
-main.cpp:1460 ID3D11Device::CreateSamplerState() succeeded..
-main.cpp:1460 ID3D11Device::CreateRenderTargerView() succeeded..
-main.cpp:1460 ID3D11Device::CreateRenderTargetView() succeeded for framebuffer..
-main.cpp:1460 ID3D11Device::CreateShaderResourveView() succeeded for framebuffer..
-main.cpp:1460 ID3D11::CreateDepthStencilView() succeeded..
-main.cpp:1460 resize() succeeded..
-main.cpp:1460 Initialize() successful!
-main.cpp:1460 ID3D11Device::CreateRenderTargerView() succeeded..
-main.cpp:1460 ID3D11Device::CreateRenderTargetView() succeeded for framebuffer..
-main.cpp:1460 ID3D11Device::CreateShaderResourveView() succeeded for framebuffer..
-main.cpp:1460 ID3D11::CreateDepthStencilView() succeeded..
-main.cpp:1460 resize() succeeded!
-main.cpp:1460 Uninitialize() succeeded..
-main.cpp:1460 Log file closed..
+main.cpp:1465 D3D11CreateDeviceAndSwapChain() succeeded..
+main.cpp:1465 The chosen driver is of: main.cpp:1465 Hardware Type. 
+main.cpp:1465 The supported highest feature level is: main.cpp:1465 11.0 
+main.cpp:1465 D3DCompile() successful for Vertex Shader()..
+main.cpp:1465 ID3D11Device::CreateVertexShader() succeeded..
+main.cpp:1465 D3DCompile() successful for Pixel Shader()..
+main.cpp:1465 ID3D11Device::CreatePixelShader() succeeded..
+main.cpp:1465 ID3D11Device::CreateInputLayout() succeeded..
+main.cpp:1465 ID3D11Device::CreateBuffer() succeeded for vertex buffer position..
+main.cpp:1465 ID3D11Device::CreateBuffer() succeeded for vertex buffer color..
+main.cpp:1465 ID3D11Device::CreateBuffer() succeeded for vertex buffer position..
+main.cpp:1465 ID3D11Device::CreateBuffer() succeeded for vertex buffer color..
+main.cpp:1465 ID3D11Device::CreateBuffer() succeeded for constant buffer..
+main.cpp:1465 ID3D11Device::CreateRasterizerState() succeeded..
+main.cpp:1465 DirectX::CreateWICTextureFromFile() succeeded..
+main.cpp:1465 LoadD3DTexture() succeeded..
+main.cpp:1465 ID3D11Device::CreateSamplerState() succeeded..
+main.cpp:1465 DirectX::CreateWICTextureFromFile() succeeded..
+main.cpp:1465 LoadD3DTexture() succeeded..
+main.cpp:1465 ID3D11Device::CreateSamplerState() succeeded..
+main.cpp:1465 ID3D11Device::CreateSamplerState() succeeded..
+main.cpp:1465 ID3D11Device::CreateRenderTargerView() succeeded..
+main.cpp:1465 ID3D11Device::CreateRenderTargetView() succeeded for framebuffer..
+main.cpp:1465 ID3D11Device::CreateShaderResourveView() succeeded for framebuffer..
+main.cpp:1465 ID3D11::CreateDepthStencilView() succeeded..
+main.cpp:1465 resize() succeeded..
+main.cpp:1465 Initialize() successful!
+main.cpp:1465 Uninitialize() succeeded..
+main.cpp:1465 Log file closed..
+main.cpp:1465 Uninitialize() succeeded..
+main.cpp:1465 Log file closed..

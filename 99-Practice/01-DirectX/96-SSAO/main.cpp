@@ -5,9 +5,6 @@
 #include <d3d11.h>        
 #include <d3dcompiler.h>  // for shader compilation
 
-#include <cuda_d3d11_interop.h>
-#include <cuda_runtime.h>
-
 #pragma warning(disable:4838)
 #include "XNAMath\xnamath.h"
 
@@ -16,11 +13,10 @@
 // linker commands
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "d3dcompiler.lib")
-#pragma comment(lib, "cudart.lib")
 
 // macros
-#define WIN_WIDTH  1920
-#define WIN_HEIGHT 1080
+#define WIN_WIDTH  800
+#define WIN_HEIGHT 600
 
 // global function declarations
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -48,32 +44,49 @@ ID3D11RenderTargetView *gpID3D11RenderTargetView = NULL;
 ID3D11VertexShader *gpID3D11VertexShader = NULL;
 ID3D11PixelShader *gpID3D11PixelShader = NULL;
 
+ID3D11Buffer *gpID3D11Buffer_VertexBuffer_Plane_Position = NULL;
+ID3D11Buffer *gpID3D11Buffer_VertexBuffer_Plane_Normal = NULL;
+ID3D11Buffer *gpID3D11Buffer_VertexBuffer_Cube_Position = NULL;
+ID3D11Buffer *gpID3D11Buffer_VertexBuffer_Cube_Normal = NULL;
+
 ID3D11InputLayout *gpID3D11InputLayout = NULL;
 ID3D11Buffer *gpID3D11Buffer_ConstantBuffer = NULL;
 
 ID3D11RasterizerState *gpID3D11RasterizerState = NULL;
 ID3D11DepthStencilView *gpID3D11DepthStencilView = NULL;
 
-ID3D11Buffer *gpID3D11Buffer_VertexBuffer = NULL;
-ID3D11Buffer *gpID3D11Buffer_VertexBuffer_GPU = NULL;
-
-const int gMeshWidth = 1024;
-const int gMeshHeight = 1024;
-#define MY_ARRAY_SIZE gMeshWidth*gMeshHeight*4
-
-float pos[gMeshWidth][gMeshHeight][4];
-float animationTime = 0.0f;
-bool bOnGPU = false;
-
-struct cudaGraphicsResource *graphicsResource = NULL;
-cudaError_t error;
+float gAngleCube = 0.0f;
 
 // uniforms
 struct CBUFFER
 {
-	XMMATRIX WorldViewProjectionMatrix;
-	XMVECTOR Color;
+	XMMATRIX WorldMatrix;
+	XMMATRIX ViewMatrix;
+	XMMATRIX ProjectionMatrix;
+
+	XMVECTOR La;
+	XMVECTOR Ld;
+	XMVECTOR Ls;
+	XMVECTOR LightPosition;
+
+	XMVECTOR Ka;
+	XMVECTOR Kd;
+	XMVECTOR Ks;
+	float Material_Shininess;
+
+	unsigned int KeyPressed;
+
 };
+
+float lightAmbient[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+float lightDiffuse[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+float lightSpecular[4] = { 1.0f, 0.0f, 1.0f, 1.0f };
+float lightPosition[4] = { 100.0f, 100.0f, -100.0f, 1.0f };
+
+float materialAmbient[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+float materialDiffuse[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+float materialSpecular[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+float materialShininess = 128.0f;
 
 XMMATRIX gPerspectiveProjectionMatrix;
 
@@ -130,7 +143,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 
 	// create window
 	hwnd = CreateWindow(szClassName,
-		TEXT("DirectX | CUDA InterOp | CPU"),
+		TEXT("DirectX | Screen Space Ambient Occlusion"),
 		WS_OVERLAPPEDWINDOW,
 		(width / 2) - (WIN_WIDTH/2),
 		(height / 2) - (WIN_HEIGHT/2),
@@ -233,23 +246,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 			{
 				Log("resize() succeeded!\n");
 			}
-		}
-		break;
-
-	case WM_CHAR:
-		switch (wParam)
-		{
-			case 'G':
-			case 'g':
-				bOnGPU = true;
-				SetWindowText(ghwnd, TEXT("DirectX | CUDA InterOp | GPU"));
-				break;
-
-			case 'C':
-			case 'c':
-				bOnGPU = false;
-				SetWindowText(ghwnd, TEXT("DirectX | CUDA InterOp | CPU"));
-				break;
 		}
 		break;
 
@@ -410,57 +406,62 @@ HRESULT initialize(void)
 			Log("Unknown \n");
 	}
 
-	///// C U D A //////////////////////////////////////////////////////////////////
-
-	// cuda initialization
-	int devCount;
-	error = cudaGetDeviceCount(&devCount);
-	if (error != cudaSuccess)
-	{
-		Log("cudaDeviceCount() failed..\n");
-		uninitialize();
-		DestroyWindow(ghwnd);
-	}
-	else if (devCount == 0)
-	{
-		Log("no CUDA device detected..\n");
-		uninitialize();
-		DestroyWindow(ghwnd);
-	}
-	else
-	{
-		error = cudaSetDevice(0);
-		if (error != cudaSuccess)
-		{
-			Log("cudaSetDevice() failed..\n");
-			uninitialize();
-			DestroyWindow(ghwnd);
-		}
-	}
-
-	////////////////////////////////////////////////////////////////////////////////
-
 	// initialize shaders, input layouts, constant buffers etc..
 
 	//// vertex shader ////////////////////////////////////////////////////////////
 	const char *vertexShaderSourceCode =
-		"cbuffer ConstantBuffer                                         \n" \
-		"{                                                              \n" \
-		"	float4x4 worldViewProjectionMatrix;                         \n" \
-		"	float4   color;                                             \n" \
-		"}                                                              \n" \
-		"                                                               \n" \
-		"struct vertex_output                                           \n" \
-		"{                                                              \n" \
-		"	float4 position: SV_POSITION;                               \n" \
-		"};                                                             \n" \
-		"                                                               \n" \
-		"vertex_output main(float4 pos: POSITION)  \n" \
-		"{                                                              \n" \
-		"	vertex_output output;                                       \n" \
-		"	output.position = mul(worldViewProjectionMatrix, pos);      \n" \
-		"	return(output);                                             \n" \
-		"}                                                              \n";
+		"cbuffer ConstantBuffer                                                               \n" \
+		"{                                                                                    \n" \
+		"	float4x4 worldMatrix;                                                             \n" \
+		"	float4x4 viewMatrix;                                                              \n" \
+		"	float4x4 projectionMatrix;                                                        \n" \
+		"                                                                                     \n" \
+		"	float4   la;                                                                      \n" \
+		"	float4   ld;                                                                      \n" \
+		"	float4   ls;                                                                      \n" \
+		"	float4   lightPosition;                                                           \n" \
+		"                                                                                     \n" \
+		"	float4   ka;                                                                      \n" \
+		"	float4   kd;                                                                      \n" \
+		"	float4   ks;                                                                      \n" \
+		"	float    material_shininess;                                                      \n" \
+		"                                                                                     \n" \
+		"	uint     keyPressed;                                                              \n" \
+		"}                                                                                    \n" \
+		"                                                                                     \n" \
+		"struct vertex_output                                                                 \n" \
+		"{                                                                                    \n" \
+		"	float4 position        : SV_POSITION;                                             \n" \
+		"	float3 tnorm           : NORMAL0;                                                 \n" \
+		"	float3 light_direction : NORMAL1;                                                 \n" \
+		"	float3 viewer_vector   : NORMAL2;                                                 \n" \
+		"};                                                                                   \n" \
+		"                                                                                     \n" \
+		"vertex_output main(float4 pos: POSITION, float4 normal: NORMAL)                      \n" \
+		"{                                                                                    \n" \
+		"	vertex_output output;                                                             \n" \
+		"                                                                                     \n" \
+		"   if (keyPressed == 1)                                                              \n" \
+		"   {                                                                                 \n" \
+		"       float4 eyeCoordinate = mul(worldMatrix, pos);                                 \n" \
+		"       eyeCoordinate = mul(viewMatrix, eyeCoordinate);                               \n" \
+		"                                                                                     \n" \
+		"       float3 tnorm = mul((float3x3)worldMatrix, (float3)normal);                    \n" \
+		"       float3 light_direction = (float3)(lightPosition - eyeCoordinate);             \n" \
+		"       float3 viewer_vector = normalize(-eyeCoordinate.xyz);                         \n" \
+		"                                                                                     \n" \
+		"       output.tnorm = tnorm;                                                         \n" \
+		"       output.light_direction = light_direction;                                     \n" \
+		"       output.viewer_vector = viewer_vector;                                         \n" \
+		"   }                                                                                 \n" \
+		"                                                                                     \n" \
+		"	float4 position = mul(worldMatrix, pos);                                          \n" \
+		"	position = mul(viewMatrix, position);                                             \n" \
+		"	position = mul(projectionMatrix, position);                                       \n" \
+		"	output.position = position;                                                       \n" \
+		"                                                                                     \n" \
+		"	return(output);                                                                   \n" \
+		"}                                                                                    \n";
 
 	ID3DBlob *pID3DBlob_VertexShaderCode = NULL;
 	ID3DBlob *pID3DBlob_Error = NULL;
@@ -515,16 +516,52 @@ HRESULT initialize(void)
 	
 	//// pixel shader /////////////////////////////////////////////////////////////
 	const char *pixelShaderSourceCode =
-		"cbuffer ConstantBuffer                                         \n" \
-		"{                                                              \n" \
-		"	float4x4 worldViewProjectionMatrix;                         \n" \
-		"	float4   color;                                             \n" \
-		"}                                                              \n" \
-		"                                                               \n" \
-		"float4 main(float4 pos: SV_POSITION): SV_TARGET                \n" \
-		"{                                                              \n" \
-		"	return(color);                                              \n" \
-		"}                                                              \n";
+		"cbuffer ConstantBuffer                                                               \n" \
+		"{                                                                                    \n" \
+		"	float4x4 worldMatrix;                                                             \n" \
+		"	float4x4 viewMatrix;                                                              \n" \
+		"	float4x4 projectionMatrix;                                                        \n" \
+		"                                                                                     \n" \
+		"	float4   la;                                                                      \n" \
+		"	float4   ld;                                                                      \n" \
+		"	float4   ls;                                                                      \n" \
+		"	float4   lightPosition;                                                           \n" \
+		"                                                                                     \n" \
+		"	float4   ka;                                                                      \n" \
+		"	float4   kd;                                                                      \n" \
+		"	float4   ks;                                                                      \n" \
+		"	float    material_shininess;                                                      \n" \
+		"                                                                                     \n" \
+		"	uint     keyPressed;                                                              \n" \
+		"}                                                                                    \n" \
+		"                                                                                     \n" \
+		"struct vertex_output                                                                 \n" \
+		"{                                                                                    \n" \
+		"	float4 position        : SV_POSITION;                                             \n" \
+		"	float3 tnorm           : NORMAL0;                                                 \n" \
+		"	float3 light_direction : NORMAL1;                                                 \n" \
+		"	float3 viewer_vector   : NORMAL2;                                                 \n" \
+		"};                                                                                   \n" \
+		"                                                                                     \n" \
+		"float4 main(float4 pos: SV_POSITION, vertex_output input): SV_TARGET                 \n" \
+		"{                                                                                    \n" \
+		"   float4 phong_ads_color = float4(1.0,1.0,1.0,1.0);                                 \n" \
+		"                                                                                     \n" \
+		"       float3 ntnorm = normalize(input.tnorm);                                       \n" \
+		"       float3 nlight_direction = normalize(input.light_direction);                   \n" \
+		"       float3 nviewer_vector = normalize(input.viewer_vector);                       \n" \
+		"                                                                                     \n" \
+		"       float3 reflection_vector = reflect(-nlight_direction, ntnorm);                \n" \
+		"       float  tn_dot_ld = max(dot(ntnorm, nlight_direction), 0.0);                   \n" \
+		"                                                                                     \n" \
+		"       float4 ambient = la * ka;                                                     \n" \
+		"       float4 diffuse = ld * kd * tn_dot_ld;                                         \n" \
+		"       float4 specular = ls * ks * pow(max(dot(reflection_vector, nviewer_vector), 0.0), material_shininess); \n" \
+		"       phong_ads_color = ambient + diffuse + specular;                               \n" \
+		"                                                                                     \n" \
+		"	float4 color = phong_ads_color;                                                   \n" \
+		"	return(color);                                                                    \n" \
+		"}                                                                                    \n";
 
 	ID3DBlob *pID3DBlob_PixelShaderCode = NULL;
 
@@ -577,7 +614,7 @@ HRESULT initialize(void)
 	///////////////////////////////////////////////////////////////////////////////
 
 	//// create and set input layout //////////////////////////////////////////////
-	D3D11_INPUT_ELEMENT_DESC inputElementDesc[1];
+	D3D11_INPUT_ELEMENT_DESC inputElementDesc[2];
 
 	// position data
 	inputElementDesc[0].SemanticName = "POSITION";
@@ -587,6 +624,15 @@ HRESULT initialize(void)
 	inputElementDesc[0].AlignedByteOffset = 0;
 	inputElementDesc[0].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
 	inputElementDesc[0].InstanceDataStepRate = 0;
+
+	// normal data
+	inputElementDesc[1].SemanticName = "NORMAL";
+	inputElementDesc[1].SemanticIndex = 0;
+	inputElementDesc[1].Format = DXGI_FORMAT_R32G32B32_FLOAT;
+	inputElementDesc[1].InputSlot = 1;
+	inputElementDesc[1].AlignedByteOffset = 0;
+	inputElementDesc[1].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
+	inputElementDesc[1].InstanceDataStepRate = 0;
 
 	hr = gpID3D11Device->CreateInputLayout(inputElementDesc, ARRAYSIZE(inputElementDesc),
 		pID3DBlob_VertexShaderCode->GetBufferPointer(), pID3DBlob_VertexShaderCode->GetBufferSize(),
@@ -611,60 +657,270 @@ HRESULT initialize(void)
 
 	///////////////////////////////////////////////////////////////////////////////
 
-	// create vertex buffer for position
+	//// vertex data //////////////////////////////////////////////////////////////
+	
+	// Clockwise | Left Hand Rule
+	float vertices_Plane[] =
+	{
+		// triangle 
+		 8.0f, 0.0f, -8.0f, // front top
+		-8.0f, 0.0f, -8.0f, // front left
+		-8.0f, 0.0f,  8.0f, // front right
+
+		 // triangle
+		-8.0f, 0.0f,  8.0f, // front right
+		 8.0f, 0.0f,  8.0f, // front right
+		 8.0f, 0.0f, -8.0f, // front top
+	};
+
+	float normals_Plane[] =
+	{
+		 // triangle of front side
+		 0.0f, 1.0f, 0.0f, // R
+		 0.0f, 1.0f, 0.0f, // G
+		 0.0f, 1.0f, 0.0f, // B
+
+		 // triangle of right side
+		 0.0f, 1.0f, 0.0f, // R
+		 0.0f, 1.0f, 0.0f, // B
+		 0.0f, 1.0f, 0.0f, // G
+	};
+
+	float vertices_cube[] =
+	{
+		// SIDE1 (top)
+		// triangle 1
+		-1.0f,  1.0f,  1.0f,
+		 1.0f,  1.0f,  1.0f,
+		-1.0f,  1.0f, -1.0f,
+		// triangle 2
+		-1.0f,  1.0f, -1.0f,
+		 1.0f,  1.0f,  1.0f,
+		 1.0f,  1.0f, -1.0f,
+
+		// SIDE2 (bottom)
+		// triangle 1
+		 1.0f, -1.0f, -1.0f,
+		 1.0f, -1.0f,  1.0f,
+		-1.0f, -1.0f, -1.0f,
+		// triangle 2
+		-1.0f, -1.0f, -1.0f,
+		 1.0f, -1.0f,  1.0f,
+		-1.0f, -1.0f, +1.0f,
+
+		// SIDE3 (front)
+		// triangle 1
+		-1.0f,  1.0f, -1.0f,
+		 1.0f,  1.0f, -1.0f,
+		-1.0f, -1.0f, -1.0f,
+		// triangle 2
+		-1.0f, -1.0f, -1.0f,
+		 1.0f,  1.0f, -1.0f,
+		 1.0f, -1.0f, -1.0f,
+
+		// SIDE4 (back)
+		// triangle 1
+		 1.0f, -1.0f,  1.0f,
+		 1.0f,  1.0f,  1.0f,
+		-1.0f, -1.0f,  1.0f,
+		// triangle 2
+		-1.0f, -1.0f,  1.0f,
+		 1.0f,  1.0f,  1.0f,
+		-1.0f,  1.0f,  1.0f,
+
+		// SIDE5 (left)
+		// triangle 1
+		-1.0f,  1.0f,  1.0f,
+		-1.0f,  1.0f, -1.0f,
+		-1.0f, -1.0f,  1.0f,
+		// triangle 2
+		-1.0f, -1.0f,  1.0f,
+		-1.0f,  1.0f, -1.0f,
+		-1.0f, -1.0f, -1.0f,
+
+		// SIDE6 (right)
+		// triangle 1
+		 1.0f, -1.0f, -1.0f,
+		 1.0f,  1.0f, -1.0f,
+		 1.0f, -1.0f,  1.0f,
+		// triangle 2
+		 1.0f, -1.0f,  1.0f,
+		 1.0f,  1.0f, -1.0f,
+		 1.0f,  1.0f,  1.0f,
+	};
+
+	float normals_cube[] =
+	{
+		// SIDE1 (top)
+		// triangle 1
+		0.0f, 1.0f, 0.0f,
+		0.0f, 1.0f, 0.0f,
+		0.0f, 1.0f, 0.0f,
+		// triangle 2
+		0.0f, 1.0f, 0.0f,
+		0.0f, 1.0f, 0.0f,
+		0.0f, 1.0f, 0.0f,
+
+		// SIDE2 (bottom)
+		// triangle 1
+		0.0f, -1.0f, 0.0f,
+		0.0f, -1.0f, 0.0f,
+		0.0f, -1.0f, 0.0f,
+		// triangle 2
+		0.0f, -1.0f, 0.0f,
+		0.0f, -1.0f, 0.0f,
+		0.0f, -1.0f, 0.0f,
+
+		// SIDE3 (front)
+		// triangle 1
+		0.0f, 0.0f, -1.0f,
+		0.0f, 0.0f, -1.0f,
+		0.0f, 0.0f, -1.0f,
+		// triangle 2
+		0.0f, 0.0f, -1.0f,
+		0.0f, 0.0f, -1.0f,
+		0.0f, 0.0f, -1.0f,
+
+		// SIDE4 (back)
+		// triangle 1
+		0.0f, 0.0f, 1.0f,
+		0.0f, 0.0f, 1.0f,
+		0.0f, 0.0f, 1.0f,
+		// triangle 2
+		0.0f, 0.0f, 1.0f,
+		0.0f, 0.0f, 1.0f,
+		0.0f, 0.0f, 1.0f,
+
+		// SIDE5 (left)
+		// triangle 1
+		-1.0f, 0.0f, 0.0f,
+		-1.0f, 0.0f, 0.0f,
+		-1.0f, 0.0f, 0.0f,
+		// triangle 2
+		-1.0f, 0.0f, 0.0f,
+		-1.0f, 0.0f, 0.0f,
+		-1.0f, 0.0f, 0.0f,
+
+		// SIDE6 (right)
+		// triangle 1
+		1.0f, 0.0f, 0.0f,
+		1.0f, 0.0f, 0.0f,
+		1.0f, 0.0f, 0.0f,
+		// triangle 2
+		1.0f, 0.0f, 0.0f,
+		1.0f, 0.0f, 0.0f,
+		1.0f, 0.0f, 0.0f,
+	};
+
+	///////////////////////////////////////////////////////////////////////////////
+
+	// create vertex buffer for position Plane
 	D3D11_BUFFER_DESC bufferDesc_VertexBuffer;
 	ZeroMemory(&bufferDesc_VertexBuffer, sizeof(D3D11_BUFFER_DESC));
 	bufferDesc_VertexBuffer.Usage = D3D11_USAGE_DYNAMIC;
-	bufferDesc_VertexBuffer.ByteWidth = sizeof(float) * MY_ARRAY_SIZE;
+	bufferDesc_VertexBuffer.ByteWidth = sizeof(float)  *ARRAYSIZE(vertices_Plane);
 	bufferDesc_VertexBuffer.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	bufferDesc_VertexBuffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
-	hr = gpID3D11Device->CreateBuffer(&bufferDesc_VertexBuffer, NULL, &gpID3D11Buffer_VertexBuffer);
+	hr = gpID3D11Device->CreateBuffer(&bufferDesc_VertexBuffer, NULL, &gpID3D11Buffer_VertexBuffer_Plane_Position);
 	if (FAILED(hr))
 	{
-		Log("ID3D11Device::CreateBuffer() failed for vertex buffer..\n");
+		Log("ID3D11Device::CreateBuffer() failed for vertex buffer position..\n");
 		return(hr);
 	}
 	else
 	{
-		Log("ID3D11Device::CreateBuffer() succeeded for vertex buffer..\n");
+		Log("ID3D11Device::CreateBuffer() succeeded for vertex buffer position..\n");
 	}
 
-	///////////////////////////////////////////////////////////////////////////////
+	// copy vertices_Plane into above buffer
+	D3D11_MAPPED_SUBRESOURCE mappedSubresource;
+	ZeroMemory(&mappedSubresource, sizeof(D3D11_MAPPED_SUBRESOURCE));
+	gpID3D11DeviceContext->Map(gpID3D11Buffer_VertexBuffer_Plane_Position, 0,
+		D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
+	memcpy(mappedSubresource.pData, vertices_Plane, sizeof(vertices_Plane));
+	gpID3D11DeviceContext->Unmap(gpID3D11Buffer_VertexBuffer_Plane_Position, NULL);
 
 	///////////////////////////////////////////////////////////////////////////////
 
-	// create vertex buffer for position GPU
+	// create vertex buffer for color Plane
 	ZeroMemory(&bufferDesc_VertexBuffer, sizeof(D3D11_BUFFER_DESC));
 	bufferDesc_VertexBuffer.Usage = D3D11_USAGE_DYNAMIC;
-	bufferDesc_VertexBuffer.ByteWidth = sizeof(float) * MY_ARRAY_SIZE;
+	bufferDesc_VertexBuffer.ByteWidth = sizeof(float)  *ARRAYSIZE(normals_Plane);
 	bufferDesc_VertexBuffer.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	bufferDesc_VertexBuffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
-	hr = gpID3D11Device->CreateBuffer(&bufferDesc_VertexBuffer, NULL, &gpID3D11Buffer_VertexBuffer_GPU);
+	hr = gpID3D11Device->CreateBuffer(&bufferDesc_VertexBuffer, NULL, &gpID3D11Buffer_VertexBuffer_Plane_Normal);
 	if (FAILED(hr))
 	{
-		Log("ID3D11Device::CreateBuffer() failed for vertex buffer GPU..\n");
+		Log("ID3D11Device::CreateBuffer() failed for vertex buffer color..\n");
 		return(hr);
 	}
 	else
 	{
-		Log("ID3D11Device::CreateBuffer() succeeded for vertex buffer GPU..\n");
+		Log("ID3D11Device::CreateBuffer() succeeded for vertex buffer color..\n");
 	}
 
-	// register this buffer with cuda graphics resource
-	error = cudaGraphicsD3D11RegisterResource(&graphicsResource, gpID3D11Buffer_VertexBuffer_GPU, cudaGraphicsMapFlagsNone);
-	if (error != cudaSuccess)
+	// copy normals_Plane into above buffer
+	ZeroMemory(&mappedSubresource, sizeof(D3D11_MAPPED_SUBRESOURCE));
+	gpID3D11DeviceContext->Map(gpID3D11Buffer_VertexBuffer_Plane_Normal, 0,
+		D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
+	memcpy(mappedSubresource.pData, normals_Plane, sizeof(normals_Plane));
+	gpID3D11DeviceContext->Unmap(gpID3D11Buffer_VertexBuffer_Plane_Normal, NULL);
+
+	///////////////////////////////////////////////////////////////////////////////
+
+	// create vertex buffer for position cube
+	ZeroMemory(&bufferDesc_VertexBuffer, sizeof(D3D11_BUFFER_DESC));
+	bufferDesc_VertexBuffer.Usage = D3D11_USAGE_DYNAMIC;
+	bufferDesc_VertexBuffer.ByteWidth = sizeof(float)  *ARRAYSIZE(vertices_cube);
+	bufferDesc_VertexBuffer.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	bufferDesc_VertexBuffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+	hr = gpID3D11Device->CreateBuffer(&bufferDesc_VertexBuffer, NULL, &gpID3D11Buffer_VertexBuffer_Cube_Position);
+	if (FAILED(hr))
 	{
-		Log("cudaGraphicsD3D11RegisterResource() failed..\n");
-		uninitialize();
-		DestroyWindow(ghwnd);
+		Log("ID3D11Device::CreateBuffer() failed for vertex buffer position..\n");
+		return(hr);
 	}
 	else
 	{
-		Log("cudaGraphicsD3D11RegisterResource() succeeded..\n");
+		Log("ID3D11Device::CreateBuffer() succeeded for vertex buffer position..\n");
 	}
-	
+
+	// copy vertices_cube into above buffer
+	ZeroMemory(&mappedSubresource, sizeof(D3D11_MAPPED_SUBRESOURCE));
+	gpID3D11DeviceContext->Map(gpID3D11Buffer_VertexBuffer_Cube_Position, 0,
+		D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
+	memcpy(mappedSubresource.pData, vertices_cube, sizeof(vertices_cube));
+	gpID3D11DeviceContext->Unmap(gpID3D11Buffer_VertexBuffer_Cube_Position, NULL);
+
+	///////////////////////////////////////////////////////////////////////////////
+
+	// create vertex buffer for color cube
+	ZeroMemory(&bufferDesc_VertexBuffer, sizeof(D3D11_BUFFER_DESC));
+	bufferDesc_VertexBuffer.Usage = D3D11_USAGE_DYNAMIC;
+	bufferDesc_VertexBuffer.ByteWidth = sizeof(float)  *ARRAYSIZE(normals_cube);
+	bufferDesc_VertexBuffer.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	bufferDesc_VertexBuffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+	hr = gpID3D11Device->CreateBuffer(&bufferDesc_VertexBuffer, NULL, &gpID3D11Buffer_VertexBuffer_Cube_Normal);
+	if (FAILED(hr))
+	{
+		Log("ID3D11Device::CreateBuffer() failed for vertex buffer color..\n");
+		return(hr);
+	}
+	else
+	{
+		Log("ID3D11Device::CreateBuffer() succeeded for vertex buffer color..\n");
+	}
+
+	// copy normals_cube into above buffer
+	ZeroMemory(&mappedSubresource, sizeof(D3D11_MAPPED_SUBRESOURCE));
+	gpID3D11DeviceContext->Map(gpID3D11Buffer_VertexBuffer_Cube_Normal, 0,
+		D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
+	memcpy(mappedSubresource.pData, normals_cube, sizeof(normals_cube));
+	gpID3D11DeviceContext->Unmap(gpID3D11Buffer_VertexBuffer_Cube_Normal, NULL);
 
 	///////////////////////////////////////////////////////////////////////////////
 
@@ -852,98 +1108,102 @@ HRESULT resize(int width, int height)
 
 void display(void)
 {
-	// function declarations
-	void uninitialize(void);
-	void launchCUDAKernel(float4*, unsigned int, unsigned int, float);
-	void launchCPUKernel(unsigned int, unsigned int, float);
-
 	// code
 	// clear render target view to a chosen color
 	gpID3D11DeviceContext->ClearRenderTargetView(gpID3D11RenderTargetView, gClearColor);
 	gpID3D11DeviceContext->ClearDepthStencilView(gpID3D11DepthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
+	//// Plane ////////////////////////////////////////////////////////////////////
+
+	// select which vertex buffer to display
+	// position buffer
+	UINT stride = sizeof(float)  *3;
+	UINT offset = 0;
+	gpID3D11DeviceContext->IASetVertexBuffers(0, 1, &gpID3D11Buffer_VertexBuffer_Plane_Position, &stride, &offset);
+
+	// color buffer
+	stride = sizeof(float)  *3;
+	offset = 0;
+	gpID3D11DeviceContext->IASetVertexBuffers(1, 1, &gpID3D11Buffer_VertexBuffer_Plane_Normal, &stride, &offset);
+
+	// select geometry primitive
+	gpID3D11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
 	// translation is concerned with world matrix transformation
+	XMMATRIX worldMatrix = XMMatrixIdentity();
+	XMMATRIX viewMatrix = XMMatrixIdentity();
 	XMMATRIX translationMatrix = XMMatrixIdentity();
+	XMMATRIX rotationMatrix = XMMatrixIdentity();
 
 	// translation
-	translationMatrix = XMMatrixTranslation(0.0f, 0.0f, 2.0f);
+	translationMatrix = XMMatrixTranslation(0.0f, -1.0f, 0.0f);
 
-	// final WorldViewProjection matrix
-	XMMATRIX wvpMatrix = translationMatrix * gPerspectiveProjectionMatrix;
+	// this order of multiplication is important!
+	worldMatrix = rotationMatrix * translationMatrix;
 
 	// load the data into the constant buffer
 	CBUFFER constantBuffer;
 	ZeroMemory(&constantBuffer, sizeof(CBUFFER));
-	constantBuffer.WorldViewProjectionMatrix = wvpMatrix;
-	
+	constantBuffer.WorldMatrix = worldMatrix;
+	constantBuffer.ViewMatrix = viewMatrix;
+	constantBuffer.ProjectionMatrix = gPerspectiveProjectionMatrix;
+	constantBuffer.KeyPressed = 1;
 
-	// launch respective kernel
-	if (bOnGPU)
-	{
-		// 1. map with the resource
-		error = cudaGraphicsMapResources(1, &graphicsResource, 0);
-		if (error != cudaSuccess)
-		{
-			Log("cudaGraphicsMapResource() failed..\n");
-			uninitialize();
-			DestroyWindow(ghwnd);
-		}
+	constantBuffer.La = XMVectorSet(lightAmbient[0], lightAmbient[1], lightAmbient[2], lightAmbient[3]);
+	constantBuffer.Ld = XMVectorSet(lightDiffuse[0], lightDiffuse[1], lightDiffuse[2], lightDiffuse[3]);
+	constantBuffer.Ls = XMVectorSet(lightSpecular[0], lightSpecular[1], lightSpecular[2], lightSpecular[3]);
+	constantBuffer.LightPosition = XMVectorSet(lightPosition[0], lightPosition[1], lightPosition[2], lightPosition[3]);
 
-		// 2. get the pointer to mapped resource
-		float4 *ppos = NULL;
-		size_t byteCount;
-		error = cudaGraphicsResourceGetMappedPointer((void**)&ppos, &byteCount, graphicsResource);
-		if (error != cudaSuccess)
-		{
-			Log("cudaGraphicsResourceGetMappedPointer() failed..\n");
-			uninitialize();
-			DestroyWindow(ghwnd);
-		}
-
-		// 3. launch the CUDA kernel
-		launchCUDAKernel(ppos, gMeshWidth, gMeshHeight, animationTime);
-
-		// 4. unmap the resource
-		error = cudaGraphicsUnmapResources(1, &graphicsResource, 0);
-		if (error != cudaSuccess)
-		{
-			Log("cudaGraphicsResourceGetMappedPointer() failed..\n");
-			uninitialize();
-			DestroyWindow(ghwnd);
-		}
-	}
-	else
-	{
-		launchCPUKernel(gMeshWidth, gMeshHeight, animationTime);
-
-		// copy sphere_vertices into above buffer
-		D3D11_MAPPED_SUBRESOURCE mappedSubresource;
-		ZeroMemory(&mappedSubresource, sizeof(D3D11_MAPPED_SUBRESOURCE));
-		gpID3D11DeviceContext->Map(gpID3D11Buffer_VertexBuffer, 0,
-			D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
-		memcpy(mappedSubresource.pData, pos, MY_ARRAY_SIZE * sizeof(float));
-		gpID3D11DeviceContext->Unmap(gpID3D11Buffer_VertexBuffer, NULL);
-	}
-
-	// bind the respective buffer
-	UINT stride = sizeof(float) * 4;
-	UINT offset = 0;
-	if (bOnGPU)
-	{
-		constantBuffer.Color = XMVectorSet(0.0f, 1.0f, 0.0f, 1.0f);
-		gpID3D11DeviceContext->IASetVertexBuffers(0, 1, &gpID3D11Buffer_VertexBuffer_GPU, &stride, &offset);
-	}
-	else
-	{
-		constantBuffer.Color = XMVectorSet(1.0f, 0.0f, 0.0f, 1.0f);
-		gpID3D11DeviceContext->IASetVertexBuffers(0, 1, &gpID3D11Buffer_VertexBuffer, &stride, &offset);
-	}
+	constantBuffer.Ka = XMVectorSet(materialAmbient[0], materialAmbient[1], materialAmbient[2], materialAmbient[3]);
+	constantBuffer.Kd = XMVectorSet(materialDiffuse[0], materialDiffuse[1], materialDiffuse[2], materialDiffuse[3]);
+	constantBuffer.Ks = XMVectorSet(materialSpecular[0], materialSpecular[1], materialSpecular[2], materialSpecular[3]);
+	constantBuffer.Material_Shininess = materialShininess;
 
 	gpID3D11DeviceContext->UpdateSubresource(gpID3D11Buffer_ConstantBuffer, 0, NULL, &constantBuffer, 0, 0);
 
 	// draw vertex buffer to render target
-	gpID3D11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
-	gpID3D11DeviceContext->Draw(gMeshWidth*gMeshHeight, 0);
+	gpID3D11DeviceContext->Draw(6, 0);
+
+	///////////////////////////////////////////////////////////////////////////////
+
+	//// cube /////////////////////////////////////////////////////////////////////
+
+	// select which vertex buffer to display
+	// position buffer
+	stride = sizeof(float)  *3;
+	offset = 0;
+	gpID3D11DeviceContext->IASetVertexBuffers(0, 1, &gpID3D11Buffer_VertexBuffer_Cube_Position, &stride, &offset);
+
+	// color buffer
+	stride = sizeof(float)  *3;
+	offset = 0;
+	gpID3D11DeviceContext->IASetVertexBuffers(1, 1, &gpID3D11Buffer_VertexBuffer_Cube_Normal, &stride, &offset);
+
+	// select geometry primitive
+	gpID3D11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	// translation is concerned with world matrix transformation
+	worldMatrix = XMMatrixIdentity();
+	viewMatrix = XMMatrixIdentity();
+
+	// translation
+	translationMatrix = XMMatrixTranslation(1.0f, 0.0f, 6.0f);
+	rotationMatrix = XMMatrixRotationY(XMConvertToRadians(-gAngleCube));
+
+	// this order of multiplication is important!
+	worldMatrix = rotationMatrix * translationMatrix;
+
+	// load the data into the constant buffer
+	constantBuffer.WorldMatrix = worldMatrix;
+	gpID3D11DeviceContext->UpdateSubresource(gpID3D11Buffer_ConstantBuffer, 0, NULL, &constantBuffer, 0, 0);
+
+	// draw vertex buffer to render target
+	gpID3D11DeviceContext->Draw(6, 0);
+	gpID3D11DeviceContext->Draw(6, 6);
+	gpID3D11DeviceContext->Draw(6, 12);
+	gpID3D11DeviceContext->Draw(6, 18);
+	gpID3D11DeviceContext->Draw(6, 24);
+	gpID3D11DeviceContext->Draw(6, 30);
 
 	///////////////////////////////////////////////////////////////////////////////
 
@@ -953,7 +1213,9 @@ void display(void)
 
 void update(void)
 {
-	animationTime += 0.05f;
+	gAngleCube += 1.0f;
+	if (gAngleCube >= 360.0f)
+		gAngleCube = 0.0f;
 }
 
 void uninitialize(void)
@@ -971,16 +1233,28 @@ void uninitialize(void)
 		gpID3D11InputLayout = NULL;
 	}
 
-	if (gpID3D11Buffer_VertexBuffer)
+	if (gpID3D11Buffer_VertexBuffer_Plane_Normal)
 	{
-		gpID3D11Buffer_VertexBuffer->Release();
-		gpID3D11Buffer_VertexBuffer = NULL;
+		gpID3D11Buffer_VertexBuffer_Plane_Normal->Release();
+		gpID3D11Buffer_VertexBuffer_Plane_Normal = NULL;
 	}
 
-	if (gpID3D11Buffer_VertexBuffer_GPU)
+	if (gpID3D11Buffer_VertexBuffer_Plane_Position)
 	{
-		gpID3D11Buffer_VertexBuffer_GPU->Release();
-		gpID3D11Buffer_VertexBuffer_GPU = NULL;
+		gpID3D11Buffer_VertexBuffer_Plane_Position->Release();
+		gpID3D11Buffer_VertexBuffer_Plane_Position = NULL;
+	}
+
+	if (gpID3D11Buffer_VertexBuffer_Cube_Normal)
+	{
+		gpID3D11Buffer_VertexBuffer_Cube_Normal->Release();
+		gpID3D11Buffer_VertexBuffer_Cube_Normal = NULL;
+	}
+
+	if (gpID3D11Buffer_VertexBuffer_Cube_Position)
+	{
+		gpID3D11Buffer_VertexBuffer_Cube_Position->Release();
+		gpID3D11Buffer_VertexBuffer_Cube_Position = NULL;
 	}
 
 	if (gpID3D11PixelShader)
@@ -1040,31 +1314,4 @@ void Log(const char *str)
 	fopen_s(&gpFile, gszLogFile, "a+");
 	fprintf_s(gpFile, str);
 	fclose(gpFile);
-}
-
-void launchCPUKernel(unsigned int meshWidth, unsigned int meshHeight, float time)
-{
-	for (int i = 0; i < meshWidth; i++) 
-	{
-		for (int j = 0; j < meshHeight; j++)
-		{
-			for (int k = 0; k < 4; k++)
-			{
-				float u = i / (float)meshWidth;
-				float v = j / (float)meshHeight;
-
-				u = (u * 2.0) - 1.0;
-				v = (v * 2.0) - 1.0;
-
-				float freq = 4.0f;
-				float w = sinf(freq*u + time) * cosf(freq*v + time) * 0.5f;
-
-				if (k == 0) pos[i][j][k] = u;
-				if (k == 1) pos[i][j][k] = w;
-				if (k == 2) pos[i][j][k] = v;
-				if (k == 3) pos[i][j][k] = 1.0f;
-			}
-		}
-
-	}
 }

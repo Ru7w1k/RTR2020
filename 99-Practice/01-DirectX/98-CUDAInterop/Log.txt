@@ -18,5 +18,3 @@ resize() succeeded..
 Initialize() successful!
 Uninitialize() succeeded..
 Log file closed..
-Uninitialize() succeeded..
-Log file closed..

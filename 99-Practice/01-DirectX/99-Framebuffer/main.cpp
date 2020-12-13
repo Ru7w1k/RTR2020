@@ -10,6 +10,7 @@
 #include <d3dcompiler.h>  // for shader compilation
 
 #pragma warning(disable:4838)
+#pragma warning(disable:4217)
 #include "XNAMath\xnamath.h"
 #include "WICTextureLoader.h"
 
@@ -23,8 +24,8 @@
 #pragma comment(lib, "DirectXTK.lib")
 
 // macros
-#define WIN_WIDTH  800
-#define WIN_HEIGHT 600
+#define WIN_WIDTH  1920
+#define WIN_HEIGHT 1080
 
 // global function declarations
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
