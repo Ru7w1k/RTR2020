@@ -1,0 +1,4 @@
+#include "OGLTemplate.h"
+
+RMC_ICON	    ICON	rmc_icon.ico
+MARBLE_BITMAP   BITMAP  marble.bmp
