@@ -66,7 +66,7 @@ XMVECTOR assimpToXMVECTOR(aiQuaternion);
 void Lerp(XMFLOAT3, XMFLOAT3, float, XMFLOAT3*);
 void loadModel(const aiScene *, aiMesh *, vector<Vertex> *, vector<uint> *, Bone *, uint *);
 void loadAnimation(const aiScene *, Animation&);
-
+void getPose(Animation&, Bone&, float, vector<XMMATRIX>&, XMMATRIX&, XMMATRIX&);
 
 XMMATRIX assimpToXMMATRIX(aiMatrix4x4 m)
 {
@@ -105,7 +105,7 @@ bool readSkeleton(Bone *boneOutput, aiNode *node, unordered_map<string, pair<int
 		boneOutput->id = (*boneInfoTable)[boneOutput->name].first;
 		boneOutput->offset = (*boneInfoTable)[boneOutput->name].second;
 
-		for (int i = 0; i < node->mNumChildren; i++)
+		for (uint i = 0; i < node->mNumChildren; i++)
 		{
 			Bone child;
 			readSkeleton(&child, node->mChildren[i], boneInfoTable);
@@ -115,7 +115,7 @@ bool readSkeleton(Bone *boneOutput, aiNode *node, unordered_map<string, pair<int
 	}
 	else // find bones in childer
 	{
-		for (int i = 0; i < node->mNumChildren; i++)
+		for (uint i = 0; i < node->mNumChildren; i++)
 		{
 			if (readSkeleton(boneOutput, node->mChildren[i], boneInfoTable))
 			{
@@ -167,14 +167,14 @@ void loadModel(const aiScene *scene, aiMesh *mesh, vector<Vertex> *verticesOutpu
 	*nBoneCount = mesh->mNumBones;
 
 	// loop through each bone
-	for (int i = 0; i < *nBoneCount; i++)
+	for (uint i = 0; i < *nBoneCount; i++)
 	{
 		aiBone *bone = mesh->mBones[i];
 		XMMATRIX m = assimpToXMMATRIX(bone->mOffsetMatrix);
 		boneInfo[bone->mName.C_Str()] = { i, m };
 
 		// loop through each vertex that have that bone
-		for (int j = 0; j < bone->mNumWeights; j++)
+		for (uint j = 0; j < bone->mNumWeights; j++)
 		{
 			uint id = bone->mWeights[j].mVertexId;
 			float weight = bone->mWeights[j].mWeight;
@@ -209,7 +209,7 @@ void loadModel(const aiScene *scene, aiMesh *mesh, vector<Vertex> *verticesOutpu
 	}
 
 	// normalize weights to make all weights sum 1
-	for (int i = 0; i < verticesOutput->size(); i++)
+	for (uint i = 0; i < verticesOutput->size(); i++)
 	{
 		XMFLOAT4 &boneWeights = (*verticesOutput)[i].boneWeights;
 		float totalWeight = boneWeights.x + boneWeights.y + boneWeights.z + boneWeights.w;
@@ -223,7 +223,7 @@ void loadModel(const aiScene *scene, aiMesh *mesh, vector<Vertex> *verticesOutpu
 	}
 
 	// load indices
-	for (int i = 0; i < mesh->mNumFaces; i++)
+	for (uint i = 0; i < mesh->mNumFaces; i++)
 	{
 		aiFace &face = mesh->mFaces[i];
 		for (uint j = 0; j < face.mNumIndices; j++)
@@ -240,35 +240,35 @@ void loadAnimation(const aiScene *scene, Animation& animation)
 	aiAnimation *anim = scene->mAnimations[0];
 
 	if (anim->mTicksPerSecond != 0.0f)
-		animation.ticksPerSecond = anim->mTicksPerSecond;
+		animation.ticksPerSecond = (float)anim->mTicksPerSecond;
 	else
 		animation.ticksPerSecond = 1;
 
-	animation.duration = anim->mDuration * anim->mTicksPerSecond;
+	animation.duration = (float)anim->mDuration * (float)anim->mTicksPerSecond;
 	animation.boneTransform = {};
 
 	// load position, rotation and scale for each bone
 	// each channel represents each bone
-	for (int i = 0; i < anim->mNumChannels; i++)
+	for (uint i = 0; i < anim->mNumChannels; i++)
 	{
 		aiNodeAnim *channel = anim->mChannels[i];
 		BoneTransformTrack track;
-
-		for (int j = 0; j < channel->mNumPositionKeys; j++)
+		
+		for (uint j = 0; j < channel->mNumPositionKeys; j++)
 		{
-			track.positionTimestamps.push_back(channel->mPositionKeys[j].mTime);
+			track.positionTimestamps.push_back((float)channel->mPositionKeys[j].mTime);
 			track.positions.push_back(assimpToXMFLOAT3(channel->mPositionKeys[j].mValue));
 		}
 
-		for (int j = 0; j < channel->mNumRotationKeys; j++)
+		for (uint j = 0; j < channel->mNumRotationKeys; j++)
 		{
-			track.rotationTimestamps.push_back(channel->mRotationKeys[j].mTime);
+			track.rotationTimestamps.push_back((float)channel->mRotationKeys[j].mTime);
 			track.rotations.push_back(assimpToXMVECTOR(channel->mRotationKeys[j].mValue));
 		}
 
-		for (int j = 0; j < channel->mNumScalingKeys; j++)
+		for (uint j = 0; j < channel->mNumScalingKeys; j++)
 		{
-			track.scaleTimestamps.push_back(channel->mScalingKeys[j].mTime);
+			track.scaleTimestamps.push_back((float)channel->mScalingKeys[j].mTime);
 			track.scales.push_back(assimpToXMFLOAT3(channel->mScalingKeys[j].mValue));
 		}
 
@@ -282,7 +282,9 @@ pair<uint, float> getTimeFraction(vector<float>& times, float& dt)
 	while (dt > times[segment])
 		segment++;
 
-	float start = times[segment - 1];
+	float start = 0.0f;
+	//if (segment > 0) 
+		start = times[segment - 1];
 	float end = times[segment];
 	float frac = (dt - start) / (end - start);
 	return {segment, frac};
@@ -325,10 +327,14 @@ void getPose(Animation& animation, Bone& skeleton, float dt, vector<XMMATRIX>& o
 	rotationM = XMMatrixRotationQuaternion(rotation);
 	scaleM = XMMatrixScaling(scale.x, scale.y, scale.z);
 
-	XMMATRIX localTransform = scaleM * rotationM * positionM;
+	//XMMATRIX localTransform = scaleM * rotationM * positionM;
+	//localTransform = scaleM;
+	XMMATRIX localTransform = positionM * rotationM * scaleM;
+	//XMMATRIX globalTransform = localTransform * parentTransform;
 	XMMATRIX globalTransform = parentTransform * localTransform;
 
-	output[skeleton.id] = globalInverseTransform * globalTransform * skeleton.offset;
+	output[skeleton.id] = ((XMMATRIX)globalInverseTransform) * ((XMMATRIX)globalTransform) * ((XMMATRIX)skeleton.offset);
+	//output[skeleton.id] = ((XMMATRIX)skeleton.offset) * ((XMMATRIX)globalTransform) * ((XMMATRIX)globalInverseTransform);
 	
 	// update value for child bones
 	for (Bone& child: skeleton.child)

@@ -8,6 +8,7 @@
 
 #pragma warning(disable:4838)
 #include "XNAMath\xnamath.h"
+#include "WICTextureLoader.h"
 
 #include "main.h"
 #include "Model.h"
@@ -16,6 +17,7 @@
 #pragma comment(lib, "shcore.lib")
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "d3dcompiler.lib")
+#pragma comment(lib, "DirectXTK.lib")
 #pragma comment(lib, "assimp-vc141-mtd.lib")
 
 // macros
@@ -58,12 +60,10 @@ ID3D11Buffer *gpID3D11Buffer_ConstantBuffer = NULL;
 ID3D11RasterizerState *gpID3D11RasterizerState = NULL;
 ID3D11DepthStencilView *gpID3D11DepthStencilView = NULL;
 
-float sphere_vertices[1146];
-float sphere_normals[1146];
-float sphere_textures[746];
-unsigned short sphere_elements[2280];
+ID3D11ShaderResourceView *gpID3D11ShaderResourceView = NULL;
+ID3D11SamplerState *gpID3D11SamplerState = NULL;
+
 unsigned int gNumElements;
-unsigned int gNumVertices;
 
 // uniforms
 struct CBUFFER
@@ -71,6 +71,7 @@ struct CBUFFER
 	XMMATRIX WorldMatrix;
 	XMMATRIX ViewMatrix;
 	XMMATRIX ProjectionMatrix;
+	XMMATRIX BoneMatrix[100];
 
 	XMVECTOR La;
 	XMVECTOR Ld;
@@ -83,21 +84,27 @@ struct CBUFFER
 	float Material_Shininess;
 
 	unsigned int KeyPressed;
-
+	
 };
 
 XMMATRIX gPerspectiveProjectionMatrix;
 bool bLight = false;
 
-float lightAmbient[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+float lightAmbient[4] = { 0.2f, 0.2f, 0.2f, 1.0f };
 float lightDiffuse[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 float lightSpecular[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-float lightPosition[4] = { 100.0f, 100.0f, -100.0f, 1.0f };
+float lightPosition[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 
-float materialAmbient[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+float materialAmbient[4] = { 0.2f, 0.2f, 0.2f, 1.0f };
 float materialDiffuse[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 float materialSpecular[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 float materialShininess = 128.0f;
+
+// model related global data
+uint boneCount = 0;
+Animation animation;
+Bone skeleton;
+XMMATRIX globalInverseTransform;
 
 // WinMain
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLine, int iCmdShow)
@@ -343,6 +350,7 @@ void ToggleFullScreen(void)
 HRESULT initialize(void)
 {
 	// function declarations
+	HRESULT LoadD3DTexture(const wchar_t*, ID3D11ShaderResourceView **);
 	void uninitialize(void);
 	HRESULT resize(int, int);
 
@@ -436,6 +444,7 @@ HRESULT initialize(void)
 		"	float4x4 worldMatrix;                                                             \n" \
 		"	float4x4 viewMatrix;                                                              \n" \
 		"	float4x4 projectionMatrix;                                                        \n" \
+		"	float4x4 boneMatrix[100];                                                         \n" \
 		"                                                                                     \n" \
 		"	float4   la;                                                                      \n" \
 		"	float4   ld;                                                                      \n" \
@@ -450,17 +459,36 @@ HRESULT initialize(void)
 		"	uint     keyPressed;                                                              \n" \
 		"}                                                                                    \n" \
 		"                                                                                     \n" \
+		"struct vertex_input                                                                  \n" \
+		"{                                                                                    \n" \
+		"	float4 pos         : POSITION;                                                    \n" \
+		"	float4 normal      : NORMAL;                                                      \n" \
+		"	float2 texcoord    : TEXCOORD;                                                    \n" \
+		"	int4   boneIds     : BONEIDS;                                                     \n" \
+		"	float4 boneWeights : BONEWEIGHTS;                                                 \n" \
+		"};                                                                                   \n" \
+		"                                                                                     \n" \
 		"struct vertex_output                                                                 \n" \
 		"{                                                                                    \n" \
 		"	float4 position        : SV_POSITION;                                             \n" \
 		"	float3 tnorm           : NORMAL0;                                                 \n" \
 		"	float3 light_direction : NORMAL1;                                                 \n" \
 		"	float3 viewer_vector   : NORMAL2;                                                 \n" \
+		"	float2 texcoord        : TEXCOORD0;                                               \n" \
 		"};                                                                                   \n" \
 		"                                                                                     \n" \
-		"vertex_output main(float4 pos: POSITION, float4 normal: NORMAL)                      \n" \
+		"vertex_output main(vertex_input input)                                               \n" \
 		"{                                                                                    \n" \
 		"	vertex_output output;                                                             \n" \
+		"   float4x4 boneTransform;                                                           \n" \
+		"                                                                                     \n" \
+		"   boneTransform = input.boneWeights.x * boneMatrix[input.boneIds.x];                \n" \
+		"   boneTransform += input.boneWeights.y * boneMatrix[input.boneIds.y];               \n" \
+		"   boneTransform += input.boneWeights.z * boneMatrix[input.boneIds.z];               \n" \
+		"   boneTransform += input.boneWeights.w * boneMatrix[input.boneIds.w];               \n" \
+		"                                                                                     \n" \
+		"   float4 pos = mul(boneTransform, float4(input.pos.xyz, 1.0));                      \n" \
+		"   float4 normal = mul(boneTransform, float4(input.normal.xyz, 0.0));                \n" \
 		"                                                                                     \n" \
 		"   if (keyPressed == 1)                                                              \n" \
 		"   {                                                                                 \n" \
@@ -480,6 +508,7 @@ HRESULT initialize(void)
 		"	position = mul(viewMatrix, position);                                             \n" \
 		"	position = mul(projectionMatrix, position);                                       \n" \
 		"	output.position = position;                                                       \n" \
+		"	output.texcoord = input.texcoord;                                                 \n" \
 		"                                                                                     \n" \
 		"	return(output);                                                                   \n" \
 		"}                                                                                    \n";
@@ -542,6 +571,7 @@ HRESULT initialize(void)
 		"	float4x4 worldMatrix;                                                             \n" \
 		"	float4x4 viewMatrix;                                                              \n" \
 		"	float4x4 projectionMatrix;                                                        \n" \
+		"	float4x4 boneMatrix[100];                                                         \n" \
 		"                                                                                     \n" \
 		"	float4   la;                                                                      \n" \
 		"	float4   ld;                                                                      \n" \
@@ -562,7 +592,11 @@ HRESULT initialize(void)
 		"	float3 tnorm           : NORMAL0;                                                 \n" \
 		"	float3 light_direction : NORMAL1;                                                 \n" \
 		"	float3 viewer_vector   : NORMAL2;                                                 \n" \
+		"	float2 texcoord        : TEXCOORD0;                                               \n" \
 		"};                                                                                   \n" \
+		"                                                                                     \n" \
+		"Texture2D myTexture2D;                                                               \n" \
+		"SamplerState mySamplerState;                                                         \n" \
 		"                                                                                     \n" \
 		"float4 main(float4 pos: SV_POSITION, vertex_output input): SV_TARGET                 \n" \
 		"{                                                                                    \n" \
@@ -583,7 +617,9 @@ HRESULT initialize(void)
 		"       phong_ads_color = ambient + diffuse + specular;                               \n" \
 		"   }                                                                                 \n" \
 		"                                                                                     \n" \
-		"	float4 color = phong_ads_color;                                                   \n" \
+		"	float4 color = myTexture2D.Sample(mySamplerState, input.texcoord);                \n" \
+		"   color *= phong_ads_color;                                                         \n" \
+		"                                                                                     \n" \
 		"	return(color);                                                                    \n" \
 		"}                                                                                    \n";
 
@@ -638,7 +674,7 @@ HRESULT initialize(void)
 	///////////////////////////////////////////////////////////////////////////////
 
 	//// create and set input layout //////////////////////////////////////////////
-	D3D11_INPUT_ELEMENT_DESC inputElementDesc[2];
+	D3D11_INPUT_ELEMENT_DESC inputElementDesc[5];
 
 	// position data
 	inputElementDesc[0].SemanticName = "POSITION";
@@ -657,6 +693,33 @@ HRESULT initialize(void)
 	inputElementDesc[1].AlignedByteOffset = D3D11_APPEND_ALIGNED_ELEMENT;
 	inputElementDesc[1].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
 	inputElementDesc[1].InstanceDataStepRate = 0;
+
+	// texture data
+	inputElementDesc[2].SemanticName = "TEXCOORD";
+	inputElementDesc[2].SemanticIndex = 0;
+	inputElementDesc[2].Format = DXGI_FORMAT_R32G32_FLOAT;
+	inputElementDesc[2].InputSlot = 2;
+	inputElementDesc[2].AlignedByteOffset = D3D11_APPEND_ALIGNED_ELEMENT;
+	inputElementDesc[2].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
+	inputElementDesc[2].InstanceDataStepRate = 0;
+
+	// bone ids
+	inputElementDesc[3].SemanticName = "BONEIDS";
+	inputElementDesc[3].SemanticIndex = 0;
+	inputElementDesc[3].Format = DXGI_FORMAT_R32G32B32A32_UINT;
+	inputElementDesc[3].InputSlot = 3;
+	inputElementDesc[3].AlignedByteOffset = D3D11_APPEND_ALIGNED_ELEMENT;
+	inputElementDesc[3].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
+	inputElementDesc[3].InstanceDataStepRate = 0;
+
+	// bone weights
+	inputElementDesc[4].SemanticName = "BONEWEIGHTS";
+	inputElementDesc[4].SemanticIndex = 0;
+	inputElementDesc[4].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+	inputElementDesc[4].InputSlot = 4;
+	inputElementDesc[4].AlignedByteOffset = D3D11_APPEND_ALIGNED_ELEMENT;
+	inputElementDesc[4].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
+	inputElementDesc[4].InstanceDataStepRate = 0;
 
 	hr = gpID3D11Device->CreateInputLayout(inputElementDesc, ARRAYSIZE(inputElementDesc),
 		pID3DBlob_VertexShaderCode->GetBufferPointer(), pID3DBlob_VertexShaderCode->GetBufferSize(),
@@ -684,8 +747,9 @@ HRESULT initialize(void)
 	//// vertex data from model ///////////////////////////////////////////////////
 
 	Assimp::Importer importer;
-	const char* filePath = "model/stormtrooper.dae";
-	const aiScene* scene = importer.ReadFile(filePath, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenSmoothNormals);
+	//const char* filePath = "model/stormtrooper.dae";
+	const char* filePath = "model/man.dae";
+	const aiScene* scene = importer.ReadFile(filePath, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenSmoothNormals | aiProcess_MakeLeftHanded | aiProcess_FlipWindingOrder);
 	if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
 	{
 		Log("Assimp Error: ");
@@ -698,13 +762,10 @@ HRESULT initialize(void)
 
 	vector<Vertex> vertices = {};
 	vector<uint> indices = {};
-	uint boneCount = 0;
-	Animation animation;
-	Bone skeleton;
 
 	// inverse the global transformation matrix
 	XMVECTOR det;
-	XMMATRIX globalInverseTransform = assimpToXMMATRIX(scene->mRootNode->mTransformation);
+	globalInverseTransform = assimpToXMMATRIX(scene->mRootNode->mTransformation);
 	globalInverseTransform = XMMatrixInverse(&det, globalInverseTransform);
 
 	Log("assimp: loading model..\n");
@@ -798,6 +859,41 @@ HRESULT initialize(void)
 
 	///////////////////////////////////////////////////////////////////////////////
 
+	//// diffuse texture //////////////////////////////////////////////////////////
+
+	// create texture resource and texture view
+	hr = LoadD3DTexture(L"model//diffuse.png", &gpID3D11ShaderResourceView);
+	if (FAILED(hr))
+	{
+		Log("LoadD3DTexture() failed..\n");
+		return(hr);
+	}
+	else
+	{
+		Log("LoadD3DTexture() succeeded..\n");
+	}
+
+	// create sampler state
+	D3D11_SAMPLER_DESC samplerDesc;
+	ZeroMemory(&samplerDesc, sizeof(D3D11_SAMPLER_DESC));
+	samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+
+	hr = gpID3D11Device->CreateSamplerState(&samplerDesc, &gpID3D11SamplerState);
+	if (FAILED(hr))
+	{
+		Log("ID3D11Device::CreateSamplerState() failed..\n");
+	}
+	else 
+	{
+		Log("ID3D11Device::CreateSamplerState() succeeded..\n");
+	}
+
+	///////////////////////////////////////////////////////////////////////////////
+
+
 	//// rasterization state //////////////////////////////////////////////////////
 
 	// in D3D, backface culling is by default ON
@@ -831,9 +927,9 @@ HRESULT initialize(void)
 	///////////////////////////////////////////////////////////////////////////////
 
 	// d3d clear color
-	gClearColor[0] = 0.0f;
-	gClearColor[1] = 0.0f;
-	gClearColor[2] = 0.0f;
+	gClearColor[0] = 0.2f;
+	gClearColor[1] = 0.2f;
+	gClearColor[2] = 0.2f;
 	gClearColor[3] = 1.0f;
 
 	// set projection matrix
@@ -976,26 +1072,65 @@ void display(void)
 	offset = offsetof(Vertex, normal);
 	gpID3D11DeviceContext->IASetVertexBuffers(1, 1, &gpID3D11Buffer_VertexBuffer_Position, &stride, &offset);
 
+	// texcoord buffer
+	stride = sizeof(Vertex);
+	offset = offsetof(Vertex, uv);
+	gpID3D11DeviceContext->IASetVertexBuffers(2, 1, &gpID3D11Buffer_VertexBuffer_Position, &stride, &offset);
+
+	// bone ids buffer
+	stride = sizeof(Vertex);
+	offset = offsetof(Vertex, boneIDs);
+	gpID3D11DeviceContext->IASetVertexBuffers(3, 1, &gpID3D11Buffer_VertexBuffer_Position, &stride, &offset);
+
+	// texcoord buffer
+	stride = sizeof(Vertex);
+	offset = offsetof(Vertex, boneWeights);
+	gpID3D11DeviceContext->IASetVertexBuffers(4, 1, &gpID3D11Buffer_VertexBuffer_Position, &stride, &offset);
+
 	// index buffer
 	gpID3D11DeviceContext->IASetIndexBuffer(gpID3D11Buffer_IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
 
 	// select geometry primitive
 	gpID3D11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
+	// bind texture and sampler as pixel shader resource
+	gpID3D11DeviceContext->PSSetShaderResources(0, 1, &gpID3D11ShaderResourceView);
+	gpID3D11DeviceContext->PSSetSamplers(0, 1, &gpID3D11SamplerState);
+
 	// translation is concerned with world matrix transformation
+	XMMATRIX identity = XMMatrixIdentity();
 	XMMATRIX worldMatrix = XMMatrixIdentity();
 	XMMATRIX viewMatrix = XMMatrixIdentity();
 	XMMATRIX translationMatrix = XMMatrixIdentity();
 	XMMATRIX rotationMatrix = XMMatrixIdentity();
+	XMMATRIX rotationMatrix1 = XMMatrixIdentity();
+	XMMATRIX scaleMatrix = XMMatrixIdentity();
+
+	// camera
+	viewMatrix = XMMatrixLookAtLH(
+		XMVectorSet(0.0f, 0.0f, -20.0f, 0.0f),
+		XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f),
+		XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f)
+	);
 
 	// translation
-	static float angle = 0.0f;
-	translationMatrix = XMMatrixTranslation(0.0f, -2.0f, 4.0f);
-	rotationMatrix = XMMatrixRotationY(XMConvertToRadians(angle));
+	static float angle = 180.0f;
+	//translationMatrix = XMMatrixTranslation(0.0f, -1.75f, 20.0f);
+	//rotationMatrix = XMMatrixRotationY(XMConvertToRadians(angle));
+	//rotationMatrix1 = XMMatrixRotationX(XMConvertToRadians(-90.0f));
+	//scaleMatrix = XMMatrixScaling(0.4f, 0.4f, 0.4f);
 	angle += 0.1f;
 
 	// this order of multiplication is important!
-	worldMatrix = rotationMatrix * translationMatrix;
+	worldMatrix = scaleMatrix * rotationMatrix1 * rotationMatrix * translationMatrix;
+
+	// get the current pos
+	vector<XMMATRIX> currentPose = {};
+	XMMATRIX m = XMMatrixTranslation(0.0f, 10.0f, 0.0f);
+	currentPose.resize(boneCount, m);
+	static float elapsedTime = 0.00001f;
+	getPose(animation, skeleton, elapsedTime, currentPose, identity, globalInverseTransform);
+	elapsedTime += 0.001f;
 
 	// load the data into the constant buffer
 	CBUFFER constantBuffer;
@@ -1003,6 +1138,10 @@ void display(void)
 	constantBuffer.WorldMatrix = worldMatrix;
 	constantBuffer.ViewMatrix = viewMatrix;
 	constantBuffer.ProjectionMatrix = gPerspectiveProjectionMatrix;
+	
+	for (int i = 0; i < boneCount; i++)
+		constantBuffer.BoneMatrix[i] = ((XMMATRIX)currentPose[i]);
+
 	if (bLight)
 	{
 		constantBuffer.KeyPressed = 1;
@@ -1120,6 +1259,25 @@ void uninitialize(void)
 		Log("Uninitialize() succeeded..\n");
 		Log("Log file closed..\n");
 	}
+}
+
+HRESULT LoadD3DTexture(const wchar_t *textureFileName, ID3D11ShaderResourceView **ppID3D11ShaderResourceView)
+{
+	// code
+	HRESULT hr;
+
+	// create texture
+	hr = DirectX::CreateWICTextureFromFile(gpID3D11Device, textureFileName, NULL, ppID3D11ShaderResourceView);
+	if (FAILED(hr))
+	{
+		Log("DirectX::CreateWICTextureFromFile() failed..\n");
+		return(hr);
+	}
+	else
+	{
+		Log("DirectX::CreateWICTextureFromFile() succeeded..\n");
+	}
+	return hr;
 }
 
 void Log(const char *str)
