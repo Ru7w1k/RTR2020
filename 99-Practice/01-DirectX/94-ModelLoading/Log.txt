@@ -1,0 +1,27 @@
+Log.txt file created..
+D3D11CreateDeviceAndSwapChain() succeeded..
+The chosen driver is of: Hardware Type. 
+The supported highest feature level is: 11.0 
+D3DCompile() successful for Vertex Shader()..
+ID3D11Device::CreateVertexShader() succeeded..
+D3DCompile() successful for Pixel Shader()..
+ID3D11Device::CreatePixelShader() succeeded..
+ID3D11Device::CreateInputLayout() succeeded..
+assimp: file parsing done..
+assimp: loading model..
+assimp: model loading finished..
+assimp: loading animation..
+assimp: animation loading finished..
+ID3D11Device::CreateBuffer() succeeded for vertex buffer..
+ID3D11Device::CreateBuffer() succeeded for index buffer..
+ID3D11Device::CreateBuffer() succeeded for constant buffer..
+ID3D11Device::CreateRasterizerState() succeeded..
+ID3D11Device::CreateRenderTargerView() succeeded..
+ID3D11::CreateDepthStencilView() succeeded..
+resize() succeeded..
+Initialize() successful!
+ID3D11Device::CreateRenderTargerView() succeeded..
+ID3D11::CreateDepthStencilView() succeeded..
+resize() succeeded!
+Uninitialize() succeeded..
+Log file closed..
