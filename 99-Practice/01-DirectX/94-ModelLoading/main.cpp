@@ -96,8 +96,8 @@ float lightSpecular[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 float lightPosition[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 
 float materialAmbient[4] = { 0.2f, 0.2f, 0.2f, 1.0f };
-float materialDiffuse[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-float materialSpecular[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+float materialDiffuse[4] = { 0.8f, 0.8f, 0.8f, 0.8f };
+float materialSpecular[4] = { 0.8f, 0.8f, 0.8f, 0.8f };
 float materialShininess = 128.0f;
 
 // model related global data
@@ -1115,9 +1115,9 @@ void display(void)
 
 	// translation
 	static float angle = 180.0f;
-	//translationMatrix = XMMatrixTranslation(0.0f, -1.75f, 20.0f);
-	//rotationMatrix = XMMatrixRotationY(XMConvertToRadians(angle));
-	//rotationMatrix1 = XMMatrixRotationX(XMConvertToRadians(-90.0f));
+	translationMatrix = XMMatrixTranslation(0.0f, -4.0f, 0.0f);
+	rotationMatrix = XMMatrixRotationY(XMConvertToRadians(angle));
+	rotationMatrix1 = XMMatrixRotationZ(XMConvertToRadians(180.0f));
 	//scaleMatrix = XMMatrixScaling(0.4f, 0.4f, 0.4f);
 	angle += 0.1f;
 
@@ -1126,11 +1126,11 @@ void display(void)
 
 	// get the current pos
 	vector<XMMATRIX> currentPose = {};
-	XMMATRIX m = XMMatrixTranslation(0.0f, 10.0f, 0.0f);
+	XMMATRIX m = XMMatrixRotationY(XMConvertToRadians(45.0f));
 	currentPose.resize(boneCount, m);
 	static float elapsedTime = 0.00001f;
 	getPose(animation, skeleton, elapsedTime, currentPose, identity, globalInverseTransform);
-	elapsedTime += 0.001f;
+	elapsedTime += 0.01f;
 
 	// load the data into the constant buffer
 	CBUFFER constantBuffer;
@@ -1140,7 +1140,7 @@ void display(void)
 	constantBuffer.ProjectionMatrix = gPerspectiveProjectionMatrix;
 	
 	for (int i = 0; i < boneCount; i++)
-		constantBuffer.BoneMatrix[i] = ((XMMATRIX)currentPose[i]);
+		constantBuffer.BoneMatrix[i] = currentPose[i];
 
 	if (bLight)
 	{

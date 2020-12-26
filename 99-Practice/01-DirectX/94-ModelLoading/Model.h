@@ -11,9 +11,6 @@
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-
 using namespace std;
 
 typedef unsigned int  uint;
@@ -70,11 +67,17 @@ void getPose(Animation&, Bone&, float, vector<XMMATRIX>&, XMMATRIX&, XMMATRIX&);
 
 XMMATRIX assimpToXMMATRIX(aiMatrix4x4 m)
 {
-	return XMMATRIX(
+	/*return XMMATRIX(
 		m.a1, m.a2, m.a3, m.a4,
 		m.b1, m.b2, m.b3, m.b4,
 		m.c1, m.c2, m.c3, m.c4,
 		m.d1, m.d2, m.d3, m.d4
+	);*/
+	return XMMATRIX(
+		m.a1, m.b1, m.c1, m.d1,
+		m.a2, m.b2, m.c2, m.d2,
+		m.a3, m.b3, m.c3, m.d3,
+		m.a4, m.b4, m.c4, m.d4
 	);
 }
 
@@ -318,23 +321,11 @@ void getPose(Animation& animation, Bone& skeleton, float dt, vector<XMMATRIX>& o
 	XMFLOAT3 scale;
 	Lerp(scale1, scale2, fp.second, &scale);
 
-	// calculate local transfomation
-	XMMATRIX positionM = XMMatrixIdentity();
-	XMMATRIX rotationM = XMMatrixIdentity();
-	XMMATRIX scaleM = XMMatrixIdentity();
-
-	positionM = XMMatrixTranslation(position.x, position.y, position.z);
-	rotationM = XMMatrixRotationQuaternion(rotation);
-	scaleM = XMMatrixScaling(scale.x, scale.y, scale.z);
-
-	//XMMATRIX localTransform = scaleM * rotationM * positionM;
-	//localTransform = scaleM;
-	XMMATRIX localTransform = positionM * rotationM * scaleM;
-	//XMMATRIX globalTransform = localTransform * parentTransform;
-	XMMATRIX globalTransform = parentTransform * localTransform;
-
-	output[skeleton.id] = ((XMMATRIX)globalInverseTransform) * ((XMMATRIX)globalTransform) * ((XMMATRIX)skeleton.offset);
-	//output[skeleton.id] = ((XMMATRIX)skeleton.offset) * ((XMMATRIX)globalTransform) * ((XMMATRIX)globalInverseTransform);
+	XMVECTOR zero = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+	XMMATRIX localTransform = XMMatrixAffineTransformation(XMLoadFloat3(&scale), zero, rotation, XMLoadFloat3(&position));
+	
+	XMMATRIX globalTransform = localTransform * parentTransform;
+	output[skeleton.id] = ((XMMATRIX)skeleton.offset) * ((XMMATRIX)globalTransform) * ((XMMATRIX)globalInverseTransform);
 	
 	// update value for child bones
 	for (Bone& child: skeleton.child)
