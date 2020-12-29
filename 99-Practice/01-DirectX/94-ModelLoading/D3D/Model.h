@@ -67,12 +67,6 @@ void getPose(Animation&, Bone&, float, vector<XMMATRIX>&, XMMATRIX&, XMMATRIX&);
 
 XMMATRIX assimpToXMMATRIX(aiMatrix4x4 m)
 {
-	/*return XMMATRIX(
-		m.a1, m.a2, m.a3, m.a4,
-		m.b1, m.b2, m.b3, m.b4,
-		m.c1, m.c2, m.c3, m.c4,
-		m.d1, m.d2, m.d3, m.d4
-	);*/
 	return XMMATRIX(
 		m.a1, m.b1, m.c1, m.d1,
 		m.a2, m.b2, m.c2, m.d2,
@@ -285,9 +279,7 @@ pair<uint, float> getTimeFraction(vector<float>& times, float& dt)
 	while (dt > times[segment])
 		segment++;
 
-	float start = 0.0f;
-	//if (segment > 0) 
-		start = times[segment - 1];
+	float start = times[segment - 1];
 	float end = times[segment];
 	float frac = (dt - start) / (end - start);
 	return {segment, frac};
