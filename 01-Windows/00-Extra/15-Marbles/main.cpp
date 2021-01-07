@@ -1,13 +1,6 @@
 // headers
-#include <windows.h>
-#include <ShellScalingApi.h>
-#include <stdio.h>
-
-#include <GL/glew.h>
-#include <gl/GL.h>
-
-#include "vmath.h"
 #include "main.h"
+#include "scene.h"
 
 // linker options
 #pragma comment(lib, "glew32.lib")
@@ -17,6 +10,9 @@
 // macros
 #define WIN_WIDTH  800
 #define WIN_HEIGHT 600
+
+// namespace
+using namespace vmath;
 
 // global function declarations
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -34,6 +30,7 @@ FILE* gpFile = NULL;
 DWORD dwStyle;
 WINDOWPLACEMENT wpPrev = { sizeof(WINDOWPLACEMENT) };
 
+mat4   matProjection;
 
 // WinMain()
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLine, int iCmdShow)
@@ -292,8 +289,25 @@ void initialize(void)
 		DestroyWindow(ghwnd);
 	}
 
+	// scene inits
+	if (!InitScene())
+	{
+		deLog("InitScene() failed..");
+		uninitialize();
+		DestroyWindow(ghwnd);
+	}
+	
+	// clear the depth buffer
+	glClearDepth(1.0f);
+
 	// set clear color
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+	// enable depth
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LEQUAL);
+
+	matProjection = mat4::identity();
 
 	// warm-up resize call
 	resize(WIN_WIDTH, WIN_HEIGHT);
@@ -306,12 +320,15 @@ void resize(int width, int height)
 		height = 1;
 
 	glViewport(0, 0, (GLsizei)width, (GLsizei)height);	
+	matProjection = perspective(45.0, (float)width / (float)height, 0.1f, 100.0f);
 }
 
 void display(void)
 {
 	// code
-	glClear(GL_COLOR_BUFFER_BIT);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	DrawScene();
 
 	// Win32 API to swap the buffers!
 	SwapBuffers(ghdc);
@@ -320,6 +337,9 @@ void display(void)
 void uninitialize(void)
 {
 	// code
+
+	UnInitScene();
+
 	if (gbFullscreen == true)
 	{
 		dwStyle = GetWindowLong(ghwnd, GWL_STYLE);

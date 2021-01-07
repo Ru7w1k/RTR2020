@@ -140,9 +140,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="scene.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="main.h" />
+    <ClInclude Include="scene.h" />
+    <ClInclude Include="shader.h" />
     <ClInclude Include="vmath.h" />
   </ItemGroup>
   <ItemGroup>
