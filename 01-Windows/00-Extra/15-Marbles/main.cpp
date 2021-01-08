@@ -30,6 +30,7 @@ FILE* gpFile = NULL;
 DWORD dwStyle;
 WINDOWPLACEMENT wpPrev = { sizeof(WINDOWPLACEMENT) };
 
+// global projection matrix
 mat4   matProjection;
 
 // WinMain()
