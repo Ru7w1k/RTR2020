@@ -4,4 +4,4 @@
 
 void DrawSphere(void);
 void DrawCube(void);
-
+BOOL loadTexture(GLuint* texture, TCHAR imageResourceID[]);

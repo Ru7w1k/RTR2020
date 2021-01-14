@@ -99,7 +99,6 @@ deShader* deNewShader(const char* vertexShaderCode, const char* fragmentShaderCo
 	int compileStatus;
 	int linkStatus;
 	deShader* shader = (deShader*)malloc(sizeof(deShader));
-
 	compileStatus = deCreateShader(&(shader->vertexShader), GL_VERTEX_SHADER, vertexShaderCode);
 	if (compileStatus == GL_FALSE)
 	{

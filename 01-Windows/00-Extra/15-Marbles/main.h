@@ -10,19 +10,25 @@
 
 #include "vmath.h"
 
-#define deLog(...)   fprintf(gpFile, __VA_ARGS__);fprintf(gpFile, "\n")
+#define deLog(...)   fprintf(gpFile, __VA_ARGS__);fprintf(gpFile, "\n");
 
 // enums
 enum 
 {
 	AMC_ATTRIBUTE_POSITION = 0,
-	AMC_ATTRIBUTE_COLOR,
 	AMC_ATTRIBUTE_NORMAL,
 	AMC_ATTRIBUTE_TEXCOORD0
 };
 
 // globals
-extern FILE* gpFile;
+extern "C" FILE* gpFile;
 
 // resources
-#define RMC_ICON 101
+#define RMC_ICON		101
+
+#define ROCKS_DISP		200
+#define ROCKS_AO		201
+#define ROCKS_DIFF		202
+#define ROCKS_NOR		203
+#define ROCKS_ROUGH		204
+

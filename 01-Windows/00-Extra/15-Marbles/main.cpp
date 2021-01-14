@@ -376,10 +376,9 @@ void uninitialize(void)
 
 	if (gpFile)
 	{
-		fprintf(gpFile, "==== Application Terminated ====\n");
+		deLog("==== Application Terminated ====");
 		fclose(gpFile);
 		gpFile = NULL;
 	}
 }
-
 

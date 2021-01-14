@@ -113,40 +113,40 @@ void DrawCube(void)
 	// vertex array
 	const GLfloat cubeData[] = {
 		/* Top */
-		 1.0f,  1.0f, -1.0f,	1.0f, 0.0f, 0.0f,	0.0f, 1.0f, 0.0f,	0.0f, 1.0f,
-		-1.0f,  1.0f, -1.0f,	1.0f, 0.0f, 0.0f,	0.0f, 1.0f, 0.0f,	0.0f, 0.0f,
-		-1.0f,  1.0f,  1.0f,	1.0f, 0.0f, 0.0f,	0.0f, 1.0f, 0.0f,	1.0f, 0.0f,
-		 1.0f,  1.0f,  1.0f,	1.0f, 0.0f, 0.0f,	0.0f, 1.0f, 0.0f,	1.0f, 1.0f,
+		 1.0f,  1.0f, -1.0f,	0.0f, 1.0f, 0.0f,	0.0f, 1.0f,
+		-1.0f,  1.0f, -1.0f,	0.0f, 1.0f, 0.0f,	0.0f, 0.0f,
+		-1.0f,  1.0f,  1.0f,	0.0f, 1.0f, 0.0f,	1.0f, 0.0f,
+		 1.0f,  1.0f,  1.0f,	0.0f, 1.0f, 0.0f,	1.0f, 1.0f,
 
 		/* Bottom */
-		 1.0f, -1.0f,  1.0f,	0.0f, 1.0f, 0.0f,	0.0f, -1.0f, 0.0f,	1.0f, 1.0f,
-		-1.0f, -1.0f,  1.0f,	0.0f, 1.0f, 0.0f,	0.0f, -1.0f, 0.0f,	0.0f, 1.0f,
-		-1.0f, -1.0f, -1.0f,	0.0f, 1.0f, 0.0f,	0.0f, -1.0f, 0.0f,	0.0f, 0.0f,
-		 1.0f, -1.0f, -1.0f,	0.0f, 1.0f, 0.0f,	0.0f, -1.0f, 0.0f,	1.0f, 0.0f,
+		 1.0f, -1.0f,  1.0f,	0.0f, -1.0f, 0.0f,	1.0f, 1.0f,
+		-1.0f, -1.0f,  1.0f,	0.0f, -1.0f, 0.0f,	0.0f, 1.0f,
+		-1.0f, -1.0f, -1.0f,	0.0f, -1.0f, 0.0f,	0.0f, 0.0f,
+		 1.0f, -1.0f, -1.0f,	0.0f, -1.0f, 0.0f,	1.0f, 0.0f,
 
 		/* Front */
-		 1.0f,  1.0f,  1.0f,	0.0f, 0.0f, 1.0f,	0.0f, 0.0f, 1.0f,	1.0f, 1.0f,
-		-1.0f,  1.0f,  1.0f,	0.0f, 0.0f, 1.0f,	0.0f, 0.0f, 1.0f,	0.0f, 1.0f,
-		-1.0f, -1.0f,  1.0f,	0.0f, 0.0f, 1.0f,	0.0f, 0.0f, 1.0f,	0.0f, 0.0f,
-		 1.0f, -1.0f,  1.0f,	0.0f, 0.0f, 1.0f,	0.0f, 0.0f, 1.0f,	1.0f, 0.0f,
+		 1.0f,  1.0f,  1.0f,	0.0f, 0.0f, 1.0f,	1.0f, 1.0f,
+		-1.0f,  1.0f,  1.0f,	0.0f, 0.0f, 1.0f,	0.0f, 1.0f,
+		-1.0f, -1.0f,  1.0f,	0.0f, 0.0f, 1.0f,	0.0f, 0.0f,
+		 1.0f, -1.0f,  1.0f,	0.0f, 0.0f, 1.0f,	1.0f, 0.0f,
 
 		/* Back */
-		 1.0f, -1.0f, -1.0f,	0.0f, 1.0f, 1.0f,	0.0f, 0.0f, -1.0f,	1.0f, 0.0f,
-		-1.0f, -1.0f, -1.0f,	0.0f, 1.0f, 1.0f,	0.0f, 0.0f, -1.0f,	1.0f, 1.0f,
-		-1.0f,  1.0f, -1.0f,	0.0f, 1.0f, 1.0f,	0.0f, 0.0f, -1.0f,	0.0f, 1.0f,
-		 1.0f,  1.0f, -1.0f,	0.0f, 1.0f, 1.0f,	0.0f, 0.0f, -1.0f,	0.0f, 0.0f,
+		 1.0f, -1.0f, -1.0f,	0.0f, 0.0f, -1.0f,	1.0f, 0.0f,
+		-1.0f, -1.0f, -1.0f,	0.0f, 0.0f, -1.0f,	1.0f, 1.0f,
+		-1.0f,  1.0f, -1.0f,	0.0f, 0.0f, -1.0f,	0.0f, 1.0f,
+		 1.0f,  1.0f, -1.0f,	0.0f, 0.0f, -1.0f,	0.0f, 0.0f,
 
 		/* Right */
-		1.0f,  1.0f, -1.0f,		1.0f, 0.0f, 1.0f,	1.0f, 0.0f, 0.0f,	1.0f, 0.0f,
-		1.0f,  1.0f,  1.0f,		1.0f, 0.0f, 1.0f,	1.0f, 0.0f, 0.0f,	1.0f, 1.0f,
-		1.0f, -1.0f,  1.0f,		1.0f, 0.0f, 1.0f,	1.0f, 0.0f, 0.0f,	0.0f, 1.0f,
-		1.0f, -1.0f, -1.0f,		1.0f, 0.0f, 1.0f,	1.0f, 0.0f, 0.0f,	0.0f, 0.0f,
+		1.0f,  1.0f, -1.0f,		1.0f, 0.0f, 0.0f,	1.0f, 0.0f,
+		1.0f,  1.0f,  1.0f,		1.0f, 0.0f, 0.0f,	1.0f, 1.0f,
+		1.0f, -1.0f,  1.0f,		1.0f, 0.0f, 0.0f,	0.0f, 1.0f,
+		1.0f, -1.0f, -1.0f,		1.0f, 0.0f, 0.0f,	0.0f, 0.0f,
 
 		/* Left */
-		-1.0f,  1.0f,  1.0f,	1.0f, 1.0f, 0.0f,	-1.0f, 0.0f, 0.0f,	0.0f, 0.0f,
-		-1.0f,  1.0f, -1.0f,	1.0f, 1.0f, 0.0f,	-1.0f, 0.0f, 0.0f,	1.0f, 0.0f,
-		-1.0f, -1.0f, -1.0f,	1.0f, 1.0f, 0.0f,	-1.0f, 0.0f, 0.0f,	1.0f, 1.0f,
-		-1.0f, -1.0f,  1.0f,	1.0f, 1.0f, 0.0f,	-1.0f, 0.0f, 0.0f,	0.0f, 1.0f
+		-1.0f,  1.0f,  1.0f,	-1.0f, 0.0f, 0.0f,	0.0f, 0.0f,
+		-1.0f,  1.0f, -1.0f,	-1.0f, 0.0f, 0.0f,	1.0f, 0.0f,
+		-1.0f, -1.0f, -1.0f,	-1.0f, 0.0f, 0.0f,	1.0f, 1.0f,
+		-1.0f, -1.0f,  1.0f,	-1.0f, 0.0f, 0.0f,	0.0f, 1.0f
 	};
 
 	if (!vao || !vbo)
@@ -161,19 +161,15 @@ void DrawCube(void)
 		glBufferData(GL_ARRAY_BUFFER, sizeof(cubeData), cubeData, GL_STATIC_DRAW);
 
 		// vertex position
-		glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(0 * sizeof(float)));
+		glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(0 * sizeof(float)));
 		glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
 
-		// vertex colors
-		glVertexAttribPointer(AMC_ATTRIBUTE_COLOR, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(3 * sizeof(float)));
-		glEnableVertexAttribArray(AMC_ATTRIBUTE_COLOR);
-
 		// vertex normals
-		glVertexAttribPointer(AMC_ATTRIBUTE_NORMAL, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(6 * sizeof(float)));
+		glVertexAttribPointer(AMC_ATTRIBUTE_NORMAL, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
 		glEnableVertexAttribArray(AMC_ATTRIBUTE_NORMAL);
 
 		// vertex texcoords
-		glVertexAttribPointer(AMC_ATTRIBUTE_TEXCOORD0, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(9 * sizeof(float)));
+		glVertexAttribPointer(AMC_ATTRIBUTE_TEXCOORD0, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
 		glEnableVertexAttribArray(AMC_ATTRIBUTE_TEXCOORD0);
 
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -190,4 +186,43 @@ void DrawCube(void)
 	glDrawArrays(GL_TRIANGLE_FAN, 20, 4);
 
 	glBindVertexArray(0);
+}
+
+// Convert image resource to image data
+BOOL loadTexture(GLuint* texture, TCHAR imageResourceID[])
+{
+	// variables
+	HBITMAP hBitmap = NULL;
+	BITMAP bmp;
+	BOOL bStatus = false;
+
+	// data
+	hBitmap = (HBITMAP)LoadImage(GetModuleHandle(NULL),
+		imageResourceID,
+		IMAGE_BITMAP,
+		0, 0,
+		LR_CREATEDIBSECTION
+	);
+
+	if (hBitmap)
+	{
+		bStatus = TRUE;
+		GetObject(hBitmap, sizeof(BITMAP), &bmp);
+
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+		glGenTextures(1, texture);
+		glBindTexture(GL_TEXTURE_2D, *texture);
+
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, bmp.bmWidth, bmp.bmHeight, 0, GL_BGR, GL_UNSIGNED_BYTE, bmp.bmBits);
+		glGenerateMipmap(GL_TEXTURE_2D);
+
+		glBindTexture(GL_TEXTURE_2D, 0);
+
+		DeleteObject(hBitmap);
+	}
+
+	return bStatus;
 }

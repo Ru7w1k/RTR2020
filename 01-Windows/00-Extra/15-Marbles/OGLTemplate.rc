@@ -1,3 +1,9 @@
 #include "main.h"
 
 RMC_ICON	ICON	rmc_icon.ico
+
+ROCKS_DISP		BITMAP		res\rocks\disp.bmp
+ROCKS_AO		BITMAP		res\rocks\ao.bmp
+ROCKS_DIFF		BITMAP		res\rocks\diff.bmp
+ROCKS_NOR		BITMAP		res\rocks\norm.bmp
+ROCKS_ROUGH		BITMAP		res\rocks\rough.bmp
