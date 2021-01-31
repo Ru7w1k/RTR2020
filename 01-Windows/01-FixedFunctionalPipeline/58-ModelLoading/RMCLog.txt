@@ -1,0 +1,3 @@
+==== Application Started ====
+Vertices: 2012, Textures: 2111, Normals: 3932, Face Triangle: 3936
+==== Application Terminated ====
