@@ -31,5 +31,8 @@ int main()
 
     res = addFunc(10, 14);
     printf("%d\n", res);
+
+	dlclose(handle)
+
     return(0);
 }
