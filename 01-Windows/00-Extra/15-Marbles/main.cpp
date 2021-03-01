@@ -170,6 +170,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 		default:
 			break;
 		}
+		KbdHandleScene(wParam, lParam);
 		break;
 
 	case WM_ERASEBKGND:

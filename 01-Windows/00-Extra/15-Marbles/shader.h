@@ -42,7 +42,7 @@ int deCreateShader(GLuint* shader, GLenum type, const char* code)
 				GLsizei written;
 				glGetShaderInfoLog(*shader, GL_INFO_LOG_LENGTH, &written, szInfoLog);
 
-				deLog("Shader Compiler Info Log: %s", szInfoLog);
+				deLog("Shader Compiler Info Log: \n%s", szInfoLog);
 				free(szInfoLog);
 			}
 		}
@@ -82,7 +82,7 @@ int deCreateProgram(deShader* shader)
 				GLsizei written;
 				glGetProgramInfoLog(shader->shaderProgram, GL_INFO_LOG_LENGTH, &written, szInfoLog);
 
-				deLog("Shader Program Linking Info Log: %s", szInfoLog);
+				deLog("Shader Program Linking Info Log: \n%s", szInfoLog);
 				free(szInfoLog);
 			}
 		}

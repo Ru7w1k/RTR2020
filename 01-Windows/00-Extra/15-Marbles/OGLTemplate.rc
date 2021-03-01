@@ -5,5 +5,12 @@ RMC_ICON	ICON	rmc_icon.ico
 ROCKS_DISP		BITMAP		res\rocks\disp.bmp
 ROCKS_AO		BITMAP		res\rocks\ao.bmp
 ROCKS_DIFF		BITMAP		res\rocks\diff.bmp
-ROCKS_NOR		BITMAP		res\rocks\norm.bmp
+ROCKS_NOR		BITMAP		res\rocks\nor.bmp
 ROCKS_ROUGH		BITMAP		res\rocks\rough.bmp
+
+WOOD_DISP		BITMAP		res\wood\disp.bmp
+WOOD_AO			BITMAP		res\wood\ao.bmp
+WOOD_DIFF		BITMAP		res\wood\diff.bmp
+WOOD_NOR		BITMAP		res\wood\nor.bmp
+WOOD_ROUGH		BITMAP		res\wood\rough.bmp
+

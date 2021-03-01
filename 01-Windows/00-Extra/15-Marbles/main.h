@@ -32,3 +32,11 @@ extern "C" FILE* gpFile;
 #define ROCKS_NOR		203
 #define ROCKS_ROUGH		204
 
+#define WOOD_DISP		210
+#define WOOD_AO			211
+#define WOOD_DIFF		212
+#define WOOD_NOR		213
+#define WOOD_ROUGH		214
+
+
+
