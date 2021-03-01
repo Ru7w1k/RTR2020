@@ -1,0 +1,6 @@
+LIBRARY mylib
+EXPORTS
+    create_dynamic_array
+    get_element_at_index
+    set_element_at_index
+    destroy_dynamic_array

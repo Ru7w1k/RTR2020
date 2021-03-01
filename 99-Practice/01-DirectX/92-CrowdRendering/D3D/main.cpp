@@ -127,6 +127,8 @@ float materialShininess = 128.0f;
 // model related global data
 #define CROWD_SIZE 25*25
 uint boneCount = 0;
+uint frameCount = 0;
+uint texelsPerBone = 4;
 Animation animation;
 Bone skeleton;
 XMMATRIX globalInverseTransform;
@@ -511,12 +513,12 @@ HRESULT initialize(void)
 		"	float2 texcoord           : TEXCOORD0;                                            \n" \
 		"};                                                                                   \n" \
 		"                                                                                     \n" \
-		"float4x4 decodeMatrix(float3x4 encMatrix)                                        \n" \
+		"float4x4 decodeMatrix(float3x4 encMatrix)                                            \n" \
 		"{                                                                                    \n" \
-		"	return float4x4( float4(encMatrix[0].x, encMatrix[1].x, encMatrix[2].x, encMatrix[0].w),                               \n" \
-		"	                 float4(encMatrix[0].y, encMatrix[1].y, encMatrix[2].y, encMatrix[1].w),                               \n" \
-		"	                 float4(encMatrix[0].z, encMatrix[1].z, encMatrix[2].z, encMatrix[2].w),                               \n" \
-		"	                 float4(0.0, 0.0, 0.0, 1.0));  \n" \
+		"	return float4x4( float4(encMatrix[0].x, encMatrix[1].x, encMatrix[2].x, encMatrix[0].w),   \n" \
+		"	                 float4(encMatrix[0].y, encMatrix[1].y, encMatrix[2].y, encMatrix[1].w),   \n" \
+		"	                 float4(encMatrix[0].z, encMatrix[1].z, encMatrix[2].z, encMatrix[2].w),   \n" \
+		"	                 float4(0.0, 0.0, 0.0, 1.0));                                     \n" \
 		"}                                                                                    \n" \
 		"                                                                                     \n" \
 		"float4x4 loadBoneMatrix(uint3 animData, int bone)                                    \n" \
@@ -535,11 +537,11 @@ HRESULT initialize(void)
 		"	float2 uvOffset = float2(1.0/(float)InstanceMatricesWidth, 0.0);                  \n" \
 		"                                                                                     \n" \
 		"	float4 mat1 = myTexture2D.SampleLevel(mySamplerState, float3(uv.xy, 0), 0);       \n" \
-		"	float4 mat2 = myTexture2D.SampleLevel(mySamplerState, float3(uv.xy + uvOffset.xy, 0), 0);       \n" \
-		"	float4 mat3 = myTexture2D.SampleLevel(mySamplerState, float3(uv.xy + (2*uvOffset.xy), 0), 0);       \n" \
+		"	float4 mat2 = myTexture2D.SampleLevel(mySamplerState, float3(uv.xy + uvOffset.xy, 0), 0);      \n" \
+		"	float4 mat3 = myTexture2D.SampleLevel(mySamplerState, float3(uv.xy + (2*uvOffset.xy), 0), 0);  \n" \
 		"                                                                                     \n" \
 		"	rval = decodeMatrix(float3x4(mat1, mat2, mat3));                                  \n" \
-		"	return rval;                                                                                     \n" \
+		"	return rval;                                                                      \n" \
 		"}                                                                                    \n" \
 		"                                                                                     \n" \
 		"                                                                                     \n" \
@@ -556,8 +558,8 @@ HRESULT initialize(void)
 		"                                                                                     \n" \
 		"   float4 pos = mul(boneTransform, float4(input.pos.xyz, 1.0));                      \n" \
 		"   float4 normal = mul(boneTransform, float4(input.normal.xyz, 0.0));                \n" \
-		"   pos.x += 4.5*((float)input.instid%25.0);                                                        \n" \
-		"   pos.z += 4.5*((float)input.instid/25.0);                                                        \n" \
+		"   pos.x += 4.5*((float)input.instid%25.0);                                          \n" \
+		"   pos.z += 4.5*((float)input.instid/25.0);                                          \n" \
 		"                                                                                     \n" \
 		"   if (keyPressed == 1)                                                              \n" \
 		"   {                                                                                 \n" \
@@ -861,14 +863,14 @@ HRESULT initialize(void)
 	Log("assimp: loading animation..\n");
 	loadAnimation(scene, animation);
 	Log("assimp: animation loading finished..\n");
-	instMatrixSize = CreateAnimationTexture(animation, skeleton, 60, boneCount, &gpID3D11ShaderResourceView_Bone);
+	instMatrixSize = CreateAnimationTexture(animation, skeleton, 60, boneCount, &gpID3D11ShaderResourceView_Bone, frameCount);
 	
 	for (int i = 0; i < CROWD_SIZE; i++)
 	{
 		frameIds[i][0] = 0;
 		frameIds[i][1] = 0;
 		frameIds[i][2] = 0;
-		frameIds[i][3] = 50.0f * (float)rand() / (float)RAND_MAX;
+		frameIds[i][3] = (uint)(frameCount * (float)rand() / (float)RAND_MAX);
 	}
 
 	// create sampler state
@@ -1181,7 +1183,7 @@ HRESULT resize(int width, int height)
 		XMConvertToRadians(45.0f),
 		(FLOAT)width / (FLOAT)height,
 		0.1f,
-		100.0f
+		1000.0f
 	);
 
 	return(hr);
@@ -1226,8 +1228,8 @@ void display(void)
 	for (int i = 0; i < CROWD_SIZE; i++)
 	{
 		frameIds[i][3]++;
-		frameIds[i][3] %= 50;
-		frameIds[i][1] = 64 * frameIds[i][3];
+		frameIds[i][3] %= frameCount;
+		frameIds[i][1] = texelsPerBone * boneCount * frameIds[i][3];
 	}
 
 	// copy vertex data into above buffer
@@ -1266,11 +1268,14 @@ void display(void)
 	XMMATRIX scaleMatrix = XMMatrixIdentity();
 
 	// camera
+	static float cameraY = 0.0f;
 	viewMatrix = XMMatrixLookAtLH(
-		XMVectorSet(0.0f, 0.0f, -70.0f, 0.0f),
+		XMVectorSet(40.0f, cameraY, -90.0f, 0.0f),
 		XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f),
 		XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f)
 	);
+	if (cameraY <= 10.0f)
+		cameraY += 0.05f;
 
 	// translation
 	static float angle = 180.0f;
@@ -1278,7 +1283,7 @@ void display(void)
 	rotationMatrix = XMMatrixRotationY(XMConvertToRadians(angle));
 	rotationMatrix1 = XMMatrixRotationZ(XMConvertToRadians(180.0f));
 	//scaleMatrix = XMMatrixScaling(0.4f, 0.4f, 0.4f);
-	angle += 0.1f;
+	angle += 0.15f;
 
 	// this order of multiplication is important!
 	worldMatrix = scaleMatrix * rotationMatrix1 * rotationMatrix * translationMatrix;

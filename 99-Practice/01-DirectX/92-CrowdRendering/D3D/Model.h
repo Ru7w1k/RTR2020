@@ -65,7 +65,7 @@ void loadModel(const aiScene *, aiMesh *, vector<Vertex> *, vector<uint> *, Bone
 void loadAnimation(const aiScene *, Animation&);
 void getPose(Animation&, Bone&, float, vector<XMMATRIX>&, XMMATRIX&, XMMATRIX&);
 void getEncodedFrame(vector<XMMATRIX>& , vector<XMMATRIX>& );
-uint CreateAnimationTexture(Animation&, Bone&, int, int, ID3D11ShaderResourceView**);
+uint CreateAnimationTexture(Animation&, Bone&, int, int, ID3D11ShaderResourceView**, uint&);
 
 
 XMMATRIX assimpToXMMATRIX(aiMatrix4x4 m)
@@ -337,13 +337,13 @@ void getPose(Animation& animation, Bone& skeleton, float dt, vector<XMMATRIX>& o
 }
 
 // generate texture with all animation frames x all bone matrices
-uint CreateAnimationTexture(Animation& animation, Bone& skeleton, int fps, int boneCount, ID3D11ShaderResourceView **srv)
+uint CreateAnimationTexture(Animation& animation, Bone& skeleton, int fps, int boneCount, ID3D11ShaderResourceView **srv, uint& frameCount)
 {
 	extern ID3D11Device* gpID3D11Device;
 	extern XMMATRIX globalInverseTransform;
 
 	int maxBones = 0;
-	int frameCount = animation.duration * fps;
+	frameCount = (uint)(animation.duration * fps);
 	maxBones = frameCount * boneCount;
 	ID3D11Texture2D* texture;
 
@@ -390,7 +390,7 @@ uint CreateAnimationTexture(Animation& animation, Bone& skeleton, int fps, int b
 	// iterate over each frame of animation
 	float timeStep = animation.duration / (float)frameCount;
 	float dt = 0.00001f;
-	for (int frame = 0; frame < frameCount; frame++)
+	for (uint frame = 0; frame < frameCount; frame++)
 	{
 		// get current time bone animation matrices
 		//currentPose.resize(boneCount, XMMatrixScaling(1.0f, 15.0f, 1.0f));
@@ -437,7 +437,7 @@ uint CreateAnimationTexture(Animation& animation, Bone& skeleton, int fps, int b
 // convert it into compressed XMFLOAT4 data to store as texture
 void getEncodedFrame(vector<XMMATRIX>& frame, vector<XMMATRIX>& encodedFrame)
 {
-	for (int boneId = 0; boneId < frame.size(); boneId++)
+	for (uint boneId = 0; boneId < frame.size(); boneId++)
 	{
 		encodedFrame[boneId] = frame[boneId];
 		encodedFrame[boneId]._14 = frame[boneId]._41;
