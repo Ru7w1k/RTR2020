@@ -84,7 +84,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 	// create window
 	hwnd = CreateWindowEx(WS_EX_APPWINDOW,
 		szAppName,
-		TEXT("OpenGL | Spinning Triangle"),
+		TEXT("OpenGL | Viewports"),
 		WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE,
 		(width / 2) - 400,
 		(height / 2) - 300,
@@ -357,7 +357,7 @@ void display(void)
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	// set viewport
-		switch(gCase)
+	switch(gCase)
 	{
 		case 0: /* normal case */
 			glViewport(0, 0, gWidth, gHeight);
