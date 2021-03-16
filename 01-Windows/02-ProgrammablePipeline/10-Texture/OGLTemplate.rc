@@ -1,0 +1,5 @@
+#include "OGLTemplate.h"
+
+RMC_ICON	    ICON	rmc_icon.ico
+STONE_BITMAP    BITMAP  Stone.bmp
+KUNDALI_BITMAP  BITMAP  Vijay_Kundali.bmp
