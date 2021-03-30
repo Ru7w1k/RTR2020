@@ -1,3 +1,3 @@
 rm xwindow
-g++ -o xwindow xwindow.cpp -lX11 -lGL -lGLU
+g++ -o xwindow xwindow.cpp -lX11 -lGL -lGLU -lopenal
 ./xwindow

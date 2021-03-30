@@ -13,8 +13,13 @@
 #include <GL/glu.h>  // for OpenGL utility functions
 #include <GL/glx.h>  // for GLX APIs (bridging API)
 
+#include <AL/al.h>   // OpenAL
+#include <AL/alc.h>
+
 #define _USE_MATH_DEFINES
 #include <math.h>
+
+#include "wavhelper.h"
 
 // namespace
 using namespace std;
@@ -49,6 +54,15 @@ GLfloat planeY = 15.0f;
 GLfloat planeAngle = 80.0f;
 
 bool bADash = false;
+
+//// OPENAL //////
+
+ALCdevice *device = NULL;
+ALCcontext *context = NULL;
+ALuint buffer;
+ALuint source;
+
+//////////////////
 
 
 // entry-point function
@@ -274,6 +288,7 @@ void initialize(void)
 	// function declarations
 	void resize(int, int);
 	void uninitialize(void);
+	void initOpenAL(void);
 
 	// code
 	gGLXContext = glXCreateContext(gpDisplay, gpXVisualInfo, NULL, GL_TRUE);
@@ -281,6 +296,10 @@ void initialize(void)
 
 	// opengl
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+	// OpenAL
+	initOpenAL();
+
 
 	// warmup resize
 	resize(giWindowWidth, giWindowHeight);
@@ -448,6 +467,11 @@ void update(void)
 
 void uninitialize(void)
 {
+	void uninitOpenAL();
+
+	// OpenAL
+	uninitOpenAL();
+
 	GLXContext currentGLXContext = glXGetCurrentContext();
 	if (currentGLXContext != NULL && currentGLXContext == gGLXContext)
 	{
@@ -795,3 +819,60 @@ void plane(void)
 	glEnd();
 }
 
+void initOpenAL(void)
+{
+	// select the preferred device
+	device = alcOpenDevice(NULL);
+
+	if (device)
+	{
+		printf("\nDevice Created!!\n");
+		context = alcCreateContext(device, NULL);
+		alcMakeContextCurrent(context);
+		printf("\nContext set!!\n");
+
+		alGetError(); // clear the error
+
+		alGenBuffers(1, &buffer);
+		alGenSources(1, &source);
+
+		int channel, sampleRate, bps, size;
+		unsigned int format;
+
+    	char* data = loadWav("AbTumhareHawale.wav", &channel, &sampleRate, &bps, &size);
+		if (channel == 1) 
+		{
+			if (bps == 8) {
+				format = AL_FORMAT_MONO8;
+			} else {
+				format = AL_FORMAT_MONO16;
+			}
+		}
+		else 
+		{
+			if (bps == 8) {
+				format = AL_FORMAT_STEREO8;
+			} else {
+				format = AL_FORMAT_STEREO16;
+			}
+		}
+
+		alBufferData(buffer, format, data, size, sampleRate);
+		alSourcei(source, AL_BUFFER, buffer);
+		alSourcePlay(source);
+
+		delete[] data;
+	}
+}
+
+void uninitOpenAL(void)
+{
+	alDeleteSources(1, &source);
+	alDeleteBuffers(1, &buffer);
+
+	context = alcGetCurrentContext();
+	device = alcGetContextsDevice(context);
+	alcMakeContextCurrent(NULL);
+	alcDestroyContext(context);
+	alcCloseDevice(device);    
+}
