@@ -124,7 +124,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 	// create window
 	hwnd = CreateWindowEx(WS_EX_APPWINDOW,
 		szAppName,
-		TEXT("OpenGL | Per Vertex Light on Sphere"),
+		TEXT("OpenGL | Per Fragment Light on Sphere"),
 		WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE,
 		(width / 2) - 400,
 		(height / 2) - 300,
@@ -374,40 +374,21 @@ void initialize(void)
 		"uniform mat4 u_vMatrix; \n" \
 		"uniform mat4 u_pMatrix; \n" \
 
-		"uniform vec3 u_La; \n" \
-		"uniform vec3 u_Ld; \n" \
-		"uniform vec3 u_Ls; \n" \
-		"uniform vec3 u_Ka; \n" \
-		"uniform vec3 u_Kd; \n" \
-		"uniform vec3 u_Ks; \n" \
-
-		"uniform float u_Shininess; \n" \
 		"uniform vec4 u_LightPos; \n" \
 		"uniform int u_bLight; \n" \
 
-		"out vec3 out_PhongLight; \n" \
+		"out vec3 tNorm; \n" \
+		"out vec3 lightDir; \n" \
+		"out vec3 viewerVector; \n" \
 
 		"void main (void) \n" \
 		"{ \n" \
 		"	if (u_bLight == 1)" \
 		"	{ \n" \
 		"		vec4 eyeCoordinates = u_vMatrix * u_mMatrix * vPosition; \n" \
-		"		vec3 tNorm = normalize(mat3(u_vMatrix * u_mMatrix) * vNormal); \n" \
-		"		vec3 lightDir = normalize(vec3(u_LightPos - eyeCoordinates)); \n" \
-
-		"		float tNormDotLightDir = max(dot(tNorm, lightDir), 0.0); \n" \
-		"		vec3 reflectionVector = reflect(-lightDir, tNorm); \n" \
-		"		vec3 viewerVector = normalize(vec3(-eyeCoordinates.xyz)); \n" \
-
-		"		vec3 ambient = u_La * u_Ka; \n" \
-		"		vec3 diffuse = u_Ld * u_Kd * tNormDotLightDir; \n" \
-		"		vec3 specular = u_Ls * u_Ks * pow(max(dot(reflectionVector, viewerVector), 0.0), u_Shininess); \n" \
-
-		"		out_PhongLight = ambient + diffuse + specular; \n" \
-		"	} \n" \
-		"	else \n" \
-		"	{ \n" \
-		"		out_PhongLight = vec3(1.0, 1.0, 1.0); \n" \
+		"		tNorm = mat3(u_vMatrix * u_mMatrix) * vNormal; \n" \
+		"		lightDir = vec3(u_LightPos - eyeCoordinates); \n" \
+		"		viewerVector = normalize(vec3(-eyeCoordinates.xyz)); \n" \
 		"	} \n" \
 		"	gl_Position = u_pMatrix * u_vMatrix * u_mMatrix * vPosition; \n" \
 		"} \n";
@@ -449,12 +430,44 @@ void initialize(void)
 	const GLchar *fragmentShaderSourceCode = 
 		"#version 450 core \n" \
 
-		"in vec3 out_PhongLight; \n" \
+		"in vec3 tNorm; \n" \
+		"in vec3 lightDir; \n" \
+		"in vec3 viewerVector; \n" \
+
+		"uniform vec3 u_La; \n" \
+		"uniform vec3 u_Ld; \n" \
+		"uniform vec3 u_Ls; \n" \
+		"uniform vec3 u_Ka; \n" \
+		"uniform vec3 u_Kd; \n" \
+		"uniform vec3 u_Ks; \n" \
+
+		"uniform float u_Shininess; \n" \
+		"uniform int u_bLight; \n" \
+
 		"out vec4 FragColor; \n" \
 
 		"void main (void) \n" \
 		"{ \n" \
-		"	FragColor = vec4(out_PhongLight, 1.0); \n" \
+		"	if (u_bLight == 1)" \
+		"	{ \n" \
+		"		vec3 normTNorm = normalize(tNorm); \n" \
+		"		vec3 normLightDir = normalize(lightDir); \n" \
+		"		vec3 normViewerVector = normalize(viewerVector); \n" \
+
+		"		vec3 reflectionVector = reflect(-normLightDir, normTNorm); \n" \
+		"		float tNormDotLightDir = max(dot(normTNorm, normLightDir), 0.0); \n" \
+
+		"		vec3 ambient = u_La * u_Ka; \n" \
+		"		vec3 diffuse = u_Ld * u_Kd * tNormDotLightDir; \n" \
+		"		vec3 specular = u_Ls * u_Ks * pow(max(dot(reflectionVector, normViewerVector), 0.0), u_Shininess); \n" \
+		"		vec3 phongLight = ambient + diffuse + specular; \n" \
+
+		"		FragColor = vec4(phongLight, 1.0); \n" \
+		"	} \n" \
+		"	else \n" \
+		"	{ \n" \
+		"		FragColor = vec4(1.0); \n" \
+		"	} \n" \
 		"} \n";
 
 	glShaderSource(gFragmentShaderObject, 1, (const GLchar**)&fragmentShaderSourceCode, NULL);
