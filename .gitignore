@@ -13,3 +13,4 @@
 **/*.lib
 **/*.exp
 **/RMCLog.txt
+03-Android/00-Windowing/_Template/*
