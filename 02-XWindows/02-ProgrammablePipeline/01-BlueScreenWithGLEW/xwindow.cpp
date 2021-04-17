@@ -171,8 +171,8 @@ void CreateWindow(void)
 		GLX_GREEN_SIZE, 8,
 		GLX_BLUE_SIZE, 8,
 		GLX_ALPHA_SIZE, 8,
-		GLX_DEPTH_SIZE, 24,
 		GLX_STENCIL_SIZE, 8,
+		GLX_DEPTH_SIZE, 24,
 		None // here '0' is also possible
 	};
 
