@@ -21,6 +21,7 @@ public class MainActivity extends AppCompatActivity {
         myTextView.setGravity(Gravity.CENTER);
         myTextView.setBackgroundColor(Color.rgb(0, 0, 0));
 
+        // setContentView(R.layout.activity_main);
         setContentView(myTextView);
     }
 }
