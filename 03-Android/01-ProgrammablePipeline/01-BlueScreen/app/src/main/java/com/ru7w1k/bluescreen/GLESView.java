@@ -18,7 +18,7 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
     private final Context context;  // final ~ const
     private GestureDetector gestureDetector;
 
-    public MyTextView(Context drawingContext) {
+    public GLESView(Context drawingContext) {
         super(drawingContext);
         context = drawingContext;
 
@@ -69,7 +69,7 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
     }
 
     @Override
-    public void onDrawView(GL10 unused) {
+    public void onDrawFrame(GL10 unused) {
         draw();
     }
 
@@ -122,7 +122,7 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
 
     // private methods for OpenGLES drawing
     private void initialize(GL10 gl) {
-        GLES32.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        GLES32.glClearColor(0.0f, 0.0f, 1.0f, 1.0f);
     }
 
     private void resize(int width, int height) {
