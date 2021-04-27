@@ -16,6 +16,12 @@
 #include "vmath.h"
 
 #include "Sphere.h"
+#include "Materials.h"
+
+#define X_AXIS 0
+#define Y_AXIS 1
+#define Z_AXIS 2
+#define PAUSE  3
 
 // namespace
 using namespace std;
@@ -35,6 +41,9 @@ Window gWindow;
 XVisualInfo *gpXVisualInfo = NULL;
 Colormap gColormap;
 FILE* gpFile = NULL;
+
+int gWidth;
+int gHeight;
 
 GLXContext gGLXContext;
 
@@ -79,6 +88,9 @@ int gNumVertices = 0;
 int gNumElements = 0;
 
 bool bLight = false;
+vec4 lightPos;
+float lightAngle = 0.0f;
+int lightAxis = X_AXIS;
 
 // entry-point function
 int main(void)
@@ -149,6 +161,27 @@ int main(void)
 
 						case XK_l:
 							bLight = !bLight;
+							break;
+
+						case XK_x:
+							if (lightAxis == X_AXIS)
+								lightAxis = PAUSE;
+							else
+								lightAxis = X_AXIS;
+							break;
+
+						case XK_y:
+							if (lightAxis == Y_AXIS)
+								lightAxis = PAUSE;
+							else
+								lightAxis = Y_AXIS;
+							break;
+
+						case XK_z:
+							if (lightAxis == Z_AXIS)
+								lightAxis = PAUSE;
+							else
+								lightAxis = Z_AXIS;
 							break;
 
 						default:
@@ -677,7 +710,7 @@ void initialize(void)
 	glBindVertexArray(0);
 
 	// set clear color
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
 
 	// set clear depth
 	glClearDepth(1.0f);
@@ -687,6 +720,9 @@ void initialize(void)
 	glDepthFunc(GL_LEQUAL);
 
 	perspectiveProjectionMatrix = mat4::identity();
+
+	// materials
+	InitMaterials();
 
 	// warmup resize
 	resize(giWindowWidth, giWindowHeight);
@@ -698,9 +734,12 @@ void resize(int width, int height)
 	if (height == 0)
 		height = 1;
 
+	gWidth = width;
+	gHeight = height;
+
 	glViewport(0, 0, (GLsizei)width, (GLsizei)height);
 
-	perspectiveProjectionMatrix = vmath::perspective(45.0f, (float)width/(float)height, 0.1f, 100.0f);
+	perspectiveProjectionMatrix = vmath::perspective(60.0f, ((float)width/6.0f) / ((float)height/4.0f), 0.1f, 100.0f);
 }
 
 void display(void)
@@ -716,15 +755,13 @@ void display(void)
 	mat4 modelMatrix;
 	mat4 viewMatrix;
 
-	//// cube ////////////////////////
-
 	// intialize above matrices to identity
 	translateMatrix = mat4::identity();
 	modelMatrix = mat4::identity();
 	viewMatrix = mat4::identity();
 
 	// transformations
-	translateMatrix = translate(0.0f, 0.0f, -3.0f);
+	translateMatrix = translate(0.0f, 0.0f, -2.0f);
 	modelMatrix = translateMatrix;
 
 	// send necessary matrices to shader in respective uniforms
@@ -737,13 +774,7 @@ void display(void)
 		glUniform3f(laUniform, 0.0f, 0.0f, 0.0f);
 		glUniform3f(ldUniform, 1.0f, 1.0f, 1.0f);
 		glUniform3f(lsUniform, 1.0f, 1.0f, 1.0f);
-		glUniform4f(lightPositionUniform, 100.0f, 100.0f, 100.0f, 1.0f);
-		
-		glUniform3f(kaUniform, 0.0f, 0.0f, 0.0f);
-		glUniform3f(kdUniform, 0.5f, 0.2f, 0.7f);
-		glUniform3f(ksUniform, 0.7f, 0.7f, 0.7f);
-		glUniform1f(shininessUniform, 128.0f);
-
+		glUniform4fv(lightPositionUniform, 1, lightPos);
 		glUniform1i(enableLightUniform, 1);
 	}
 	else
@@ -753,10 +784,26 @@ void display(void)
 
 	// bind with vaoPyramid (this will avoid many binding to vbo)
 	glBindVertexArray(vaoSphere);
-
-	// draw necessary scene
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vboElementSphere);
-	glDrawElements(GL_TRIANGLES, gNumElements, GL_UNSIGNED_SHORT, 0);
+
+	float viewportW = (float)gWidth/6.0f;
+	float viewportH = (float)gHeight/4.0f;
+
+	for (int i = 0; i < 6; i++)
+	{
+		for (int j = 0; j < 4; j++)
+		{
+			glViewport(i*viewportW, j*viewportH, viewportW, viewportH);
+
+			glUniform3fv(kaUniform, 1, Materials[i][j].MaterialAmbient);
+			glUniform3fv(kdUniform, 1, Materials[i][j].MaterialDiffuse);
+			glUniform3fv(ksUniform, 1, Materials[i][j].MaterialSpecular);
+			glUniform1f(shininessUniform, Materials[i][j].MaterialShininess[0]);
+
+			// draw necessary scene
+			glDrawElements(GL_TRIANGLES, gNumElements, GL_UNSIGNED_SHORT, 0);
+		}
+	}
 
 	// unbind vaoPyramid
 	glBindVertexArray(0);
@@ -770,6 +817,31 @@ void display(void)
 void update(void)
 {
 	// code
+
+	if (lightAxis != PAUSE)
+	{
+		lightAngle += 1.0f;
+		if (lightAngle >= 360.0f) 
+			lightAngle = 0.0f;
+	}
+
+	float cosA = cosf(radians(lightAngle));
+	float sinA = sinf(radians(lightAngle));
+
+	switch (lightAxis)
+	{
+	case X_AXIS:
+		lightPos = vec4(0.0f, 100.0f * cosA, 100.0f * sinA, 1.0f);
+		break;
+
+	case Y_AXIS:
+		lightPos = vec4(100.0f * cosA, 0.0f, 100.0f * sinA, 1.0f);
+		break;
+
+	case Z_AXIS:
+		lightPos = vec4(100.0f * cosA, 100.0f * sinA, 0.0f, 1.0f);
+		break;
+	}
 }
 
 void uninitialize(void)
