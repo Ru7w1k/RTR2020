@@ -27,7 +27,21 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
     private int vertexShaderObject;
     private int fragmentShaderObject;
     private int shaderProgramObject;
-    private int mvpUniform;
+    private int mUniform;
+    private int vUniform;
+    private int pUniform;
+
+    private int laUniform;
+    private int ldUniform;
+    private int lsUniform;
+    private int lightPositionUniform;
+
+    private int kaUniform;
+    private int kdUniform;
+    private int ksUniform;
+    private int shininessUniform;
+
+    private int enableLightUniform;
 
     private int[] vaoSphere = new int[1];
     private int[] vboSpherePos = new int[1];
@@ -37,6 +51,7 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
     private int numElements;
 
     private float[] perspectiveProjectionMatrix = new float[16];
+    private boolean bLight = false;
 
     public GLESView(Context drawingContext) {
         super(drawingContext);
@@ -123,6 +138,7 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
 
     @Override
     public void onLongPress(MotionEvent e) {
+        bLight = !bLight;
     }
 
     @Override
@@ -146,13 +162,51 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
         // vertex shader        
         final String vertexShaderSourceCode = String.format(
             "#version 320 es \n" +
+            "precision lowp int; \n" +
 
             "in vec4 vPosition; \n" +
-            "uniform mat4 u_mvpMatrix; \n" +
+            "in vec3 vNormal; \n" +
+
+            "uniform mat4 u_mMatrix; \n" +
+            "uniform mat4 u_vMatrix; \n" +
+            "uniform mat4 u_pMatrix; \n" +
+
+            "uniform vec3 u_La; \n" +
+            "uniform vec3 u_Ld; \n" +
+            "uniform vec3 u_Ls; \n" +
+            "uniform vec3 u_Ka; \n" +
+            "uniform vec3 u_Kd; \n" +
+            "uniform vec3 u_Ks; \n" +
+
+            "uniform float u_Shininess; \n" +
+            "uniform vec4 u_LightPos; \n" +
+            "uniform int u_bLight; \n" +
+
+            "out vec3 out_PhongLight; \n" +
 
             "void main (void) \n" +
             "{ \n" +
-            "	gl_Position = u_mvpMatrix * vPosition; \n" +
+            "	if (u_bLight == 1)" +
+            "	{ \n" +
+            "		vec4 eyeCoordinates = u_vMatrix * u_mMatrix * vPosition; \n" +
+            "		vec3 tNorm = normalize(mat3(u_vMatrix * u_mMatrix) * vNormal); \n" +
+            "		vec3 lightDir = normalize(vec3(u_LightPos - eyeCoordinates)); \n" +
+
+            "		float tNormDotLightDir = max(dot(tNorm, lightDir), 0.0); \n" +
+            "		vec3 reflectionVector = reflect(-lightDir, tNorm); \n" +
+            "		vec3 viewerVector = normalize(vec3(-eyeCoordinates.xyz)); \n" +
+
+            "		vec3 ambient = u_La * u_Ka; \n" +
+            "		vec3 diffuse = u_Ld * u_Kd * tNormDotLightDir; \n" +
+            "		vec3 specular = u_Ls * u_Ks * pow(max(dot(reflectionVector, viewerVector), 0.0), u_Shininess); \n" +
+
+            "		out_PhongLight = ambient + diffuse + specular; \n" +
+            "	} \n" +
+            "	else \n" +
+            "	{ \n" +
+            "		out_PhongLight = vec3(1.0, 1.0, 1.0); \n" +
+            "	} \n" +
+            "	gl_Position = u_pMatrix * u_vMatrix * u_mMatrix * vPosition; \n" +
             "} \n"
         );
 
@@ -182,11 +236,12 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
             "#version 320 es \n" +
             "precision highp float; \n" +
 
+            "in vec3 out_PhongLight; \n" +
             "out vec4 FragColor; \n" +
 
             "void main (void) \n" +
             "{ \n" +
-            "	FragColor = vec4(1.0, 1.0, 1.0, 1.0); \n" +
+            "	FragColor = vec4(out_PhongLight, 1.0); \n" +
             "} \n"
         );
 
@@ -220,6 +275,7 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
 
         // pre-linking binding to vertex attribute
         GLES32.glBindAttribLocation(shaderProgramObject, GLESMacros.RMC_ATTRIBUTE_POSITION, "vPosition");
+        GLES32.glBindAttribLocation(shaderProgramObject, GLESMacros.RMC_ATTRIBUTE_NORMAL, "vNormal");
 
         // link shader program and check errors
         int[] iShaderProgramLinkStatus = new int[1];
@@ -239,7 +295,21 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
         }
 
         // get uniforms
-        mvpUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_mvpMatrix");
+        mUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_mMatrix");
+        vUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_vMatrix");
+        pUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_pMatrix");
+
+        laUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_La");
+        ldUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_Ld");
+        lsUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_Ls");
+
+        kaUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_Ka");
+        kdUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_Kd");
+        ksUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_Ks");
+
+        shininessUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_Shininess");
+        enableLightUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_bLight");
+        lightPositionUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_LightPos");
 
         // vertex array
         Sphere sphere = new Sphere();
@@ -288,7 +358,7 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
         GLES32.glBufferData(GLES32.GL_ARRAY_BUFFER, sphere_normals.length * 4, floatBuffer, GLES32.GL_STATIC_DRAW);
         GLES32.glVertexAttribPointer(GLESMacros.RMC_ATTRIBUTE_NORMAL, 3, GLES32.GL_FLOAT, false, 0, 0);
         GLES32.glEnableVertexAttribArray(GLESMacros.RMC_ATTRIBUTE_NORMAL);
-        GLES32.glBindBuffer(GLES32.GL_ARRAY_BUFFER, 0);        
+        GLES32.glBindBuffer(GLES32.GL_ARRAY_BUFFER, 0);
 
         // create vbo for elements 
         GLES32.glGenBuffers(1, vboSphereElm, 0);
@@ -342,24 +412,39 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
 
         //declaration of matrices
         float[] translateMatrix = new float[16];
-        float[] modelViewMatrix = new float[16];
-        float[] modelViewProjectionMatrix = new float[16];
+        float[] modelMatrix = new float[16];
+        float[] viewMatrix = new float[16];
 
         // intialize above matrices to identity
         Matrix.setIdentityM(translateMatrix, 0);
-        Matrix.setIdentityM(modelViewMatrix, 0);
-        Matrix.setIdentityM(modelViewProjectionMatrix, 0);
+        Matrix.setIdentityM(modelMatrix, 0);
+        Matrix.setIdentityM(viewMatrix, 0);
 
         // translation transformation
-        Matrix.translateM(modelViewMatrix, 0, 0.0f, 0.0f, -3.0f);
-
-        // do necessary matrix multiplication
-        Matrix.multiplyMM(modelViewProjectionMatrix, 0,
-            perspectiveProjectionMatrix, 0,
-            modelViewMatrix, 0);
+        Matrix.translateM(translateMatrix, 0, 0.0f, 0.0f, -3.0f);
+        modelMatrix = translateMatrix;
 
         // send necessary to shader in respective uniforms
-        GLES32.glUniformMatrix4fv(mvpUniform, 1, false, modelViewProjectionMatrix, 0);
+        GLES32.glUniformMatrix4fv(mUniform, 1, false, modelMatrix, 0);
+        GLES32.glUniformMatrix4fv(vUniform, 1, false, viewMatrix, 0);
+        GLES32.glUniformMatrix4fv(pUniform, 1, false, perspectiveProjectionMatrix, 0);
+
+        if (bLight) {
+            GLES32.glUniform3f(laUniform, 0.0f, 0.0f, 0.0f);
+            GLES32.glUniform3f(ldUniform, 1.0f, 1.0f, 1.0f);
+            GLES32.glUniform3f(lsUniform, 1.0f, 1.0f, 1.0f);
+            GLES32.glUniform4f(lightPositionUniform, 100.0f, 100.0f, 100.0f, 1.0f);
+            
+            GLES32.glUniform3f(kaUniform, 0.0f, 0.0f, 0.0f);
+            GLES32.glUniform3f(kdUniform, 0.5f, 0.2f, 0.7f);
+            GLES32.glUniform3f(ksUniform, 0.7f, 0.7f, 0.7f);
+            GLES32.glUniform1f(shininessUniform, 128.0f);
+
+            GLES32.glUniform1i(enableLightUniform, 1);
+        }
+        else {
+            GLES32.glUniform1i(enableLightUniform, 0);
+        }
 
         // bind with vao (this will avoid many binding to vbo_vertex)
         GLES32.glBindVertexArray(vaoSphere[0]);
