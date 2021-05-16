@@ -175,7 +175,6 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
             "uniform vec3 u_Ka; \n" +
             "uniform vec3 u_Kd; \n" +
             "uniform vec3 u_Ks; \n" +
-            "uniform vec3 u_Ks; \n" +
 
             "uniform float u_Shininess; \n" +
             "uniform vec4 u_LightPos[2]; \n" +
@@ -228,7 +227,7 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
             GLES32.glGetShaderiv(vertexShaderObject, GLES32.GL_INFO_LOG_LENGTH, iInfoLogLength, 0);
             if (iInfoLogLength[0] > 0) {
                 szInfoLog = GLES32.glGetShaderInfoLog(vertexShaderObject);
-                System.out.println("RMC: Vertex Shader Compile Log: \n" + szInfoLog);
+                System.out.println("RMC: Vertex Shader Compile Log: " + szInfoLog);
                 uninitialize();
                 System.exit(0);
             }
@@ -263,7 +262,7 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
             GLES32.glGetShaderiv(fragmentShaderObject, GLES32.GL_INFO_LOG_LENGTH, iInfoLogLength, 0);
             if (iInfoLogLength[0] > 0) {
                 szInfoLog = GLES32.glGetShaderInfoLog(fragmentShaderObject);
-                System.out.println("RMC: Fragment Shader Compile Log: \n" + szInfoLog);
+                System.out.println("RMC: Fragment Shader Compile Log: " + szInfoLog);
                 uninitialize();
                 System.exit(0);
             }
@@ -291,7 +290,7 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
             GLES32.glGetProgramiv(shaderProgramObject, GLES32.GL_INFO_LOG_LENGTH, iInfoLogLength, 0);
             if (iInfoLogLength[0] > 0) {
                 szInfoLog = GLES32.glGetProgramInfoLog(shaderProgramObject);
-                System.out.println("RMC: Program Compile Log: \n" + szInfoLog);
+                System.out.println("RMC: Program Compile Log: " + szInfoLog);
                 uninitialize();
                 System.exit(0);
             }
@@ -435,17 +434,23 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
 
         //declaration of matrices
         float[] translateMatrix = new float[16];
+        float[] rotateMatrix = new float[16];
         float[] modelMatrix = new float[16];
         float[] viewMatrix = new float[16];
 
         // intialize above matrices to identity
         Matrix.setIdentityM(translateMatrix, 0);
+        Matrix.setIdentityM(rotateMatrix, 0);
         Matrix.setIdentityM(modelMatrix, 0);
         Matrix.setIdentityM(viewMatrix, 0);
 
         // translation transformation
-        Matrix.translateM(translateMatrix, 0, 0.0f, 0.0f, -3.0f);
-        modelMatrix = translateMatrix;
+        Matrix.translateM(translateMatrix, 0, 0.0f, 0.0f, -5.0f);
+        Matrix.rotateM(rotateMatrix, 0, rotateMatrix, 0, anglePyramid, 0.0f, 1.0f, 0.0f);
+
+        Matrix.multiplyMM(modelMatrix, 0,
+            translateMatrix, 0,
+            rotateMatrix, 0);
 
         // send necessary to shader in respective uniforms
         GLES32.glUniformMatrix4fv(mUniform, 1, false, modelMatrix, 0);
