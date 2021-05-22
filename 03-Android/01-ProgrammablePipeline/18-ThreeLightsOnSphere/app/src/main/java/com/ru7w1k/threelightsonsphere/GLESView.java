@@ -24,24 +24,41 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
     private final Context context;  // final ~ const
     private GestureDetector gestureDetector;
 
-    private int vertexShaderObject;
-    private int fragmentShaderObject;
-    private int shaderProgramObject;
-    private int mUniform;
-    private int vUniform;
-    private int pUniform;
+    // P E R  V E R T E X //////////////////////////////////////////////////////
+    private int vertexShaderObjectPV;
+    private int fragmentShaderObjectPV;
+    private int shaderProgramObjectPV;
+    private int mUniformPV;
+    private int vUniformPV;
+    private int pUniformPV;
+    private int[] laUniformPV = new int[3];
+    private int[] ldUniformPV = new int[3];
+    private int[] lsUniformPV = new int[3];
+    private int[] lightPositionUniformPV = new int[3];
+    private int kaUniformPV;
+    private int kdUniformPV;
+    private int ksUniformPV;
+    private int shininessUniformPV;
+    private int enableLightUniformPV;
+    ////////////////////////////////////////////////////////////////////////////
 
-    private int laUniform;
-    private int ldUniform;
-    private int lsUniform;
-    private int lightPositionUniform;
-
-    private int kaUniform;
-    private int kdUniform;
-    private int ksUniform;
-    private int shininessUniform;
-
-    private int enableLightUniform;
+    // P E R  F R A G M E N T //////////////////////////////////////////////////
+    private int vertexShaderObjectPF;
+    private int fragmentShaderObjectPF;
+    private int shaderProgramObjectPF;
+    private int mUniformPF;
+    private int vUniformPF;
+    private int pUniformPF;
+    private int[] laUniformPF = new int[3];
+    private int[] ldUniformPF = new int[3];
+    private int[] lsUniformPF = new int[3];
+    private int[] lightPositionUniformPF = new int[3];
+    private int kaUniformPF;
+    private int kdUniformPF;
+    private int ksUniformPF;
+    private int shininessUniformPF;
+    private int enableLightUniformPF;
+    ////////////////////////////////////////////////////////////////////////////
 
     private int[] vaoSphere = new int[1];
     private int[] vboSpherePos = new int[1];
@@ -50,8 +67,11 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
     private int numVertices;
     private int numElements;
 
+    private Light[] lights = new Light[3];
+
     private float[] perspectiveProjectionMatrix = new float[16];
     private boolean bLight = false;
+    private boolean bFragment = false;
 
     public GLESView(Context drawingContext) {
         super(drawingContext);
@@ -112,6 +132,7 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
     // methods from onDoubleTapListener
     @Override
     public boolean onDoubleTap(MotionEvent e) {
+        bFragment = !bFragment;
         return(true);
     }
 
@@ -159,8 +180,9 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
 
     // private methods for OpenGLES drawing
     private void initialize(GL10 gl) {
-        // vertex shader        
-        final String vertexShaderSourceCode = String.format(
+        //// P E R  V E R T E X  S H A D E R ///////////////////////////////////
+        // vertex shader
+        final String vertexShaderSourceCodePV = String.format(
             "#version 320 es \n" +
             "precision lowp int; \n" +
 
@@ -171,11 +193,172 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
             "uniform mat4 u_vMatrix; \n" +
             "uniform mat4 u_pMatrix; \n" +
 
-            "uniform vec4 u_LightPos; \n" +
+            "uniform vec3 u_La[3]; \n" +
+            "uniform vec3 u_Ld[3]; \n" +
+            "uniform vec3 u_Ls[3]; \n" +
+            "uniform vec3 u_Ka; \n" +
+            "uniform vec3 u_Kd; \n" +
+            "uniform vec3 u_Ks; \n" +
+
+            "uniform float u_Shininess; \n" +
+            "uniform vec4 u_LightPos[3]; \n" +
+            "uniform int u_bLight; \n" +
+
+            "out vec3 out_PhongLight; \n" +
+
+            "void main (void) \n" +
+            "{ \n" +
+            "	out_PhongLight = vec3(0.0); \n" +
+            "	if (u_bLight == 1)" +
+            "	{ \n" +
+            "		vec4 eyeCoordinates = u_vMatrix * u_mMatrix * vPosition; \n" +
+            "		vec3 tNorm = normalize(mat3(u_vMatrix * u_mMatrix) * vNormal); \n" +
+            "		vec3 viewerVector = normalize(vec3(-eyeCoordinates.xyz)); \n" +
+
+            "		for (int i = 0; i < 3; i++) \n" +
+            "		{ \n" +
+            "			vec3 lightDir = normalize(vec3(u_LightPos[i] - eyeCoordinates)); \n" +
+            "			float tNormDotLightDir = max(dot(tNorm, lightDir), 0.0); \n" +
+            "			vec3 reflectionVector = reflect(-lightDir, tNorm); \n" +
+
+            "			vec3 ambient = u_La[i] * u_Ka; \n" +
+            "			vec3 diffuse = u_Ld[i] * u_Kd * tNormDotLightDir; \n" +
+            "			vec3 specular = u_Ls[i] * u_Ks * pow(max(dot(reflectionVector, viewerVector), 0.0), u_Shininess); \n" +
+
+            "			out_PhongLight += ambient + diffuse + specular; \n" +
+            "		} \n" +
+            "	} \n" +
+            "	else \n" +
+            "	{ \n" +
+            "		out_PhongLight = vec3(1.0, 1.0, 1.0); \n" +
+            "	} \n" +
+            "	gl_Position = u_pMatrix * u_vMatrix * u_mMatrix * vPosition; \n" +
+            "} \n"
+        );
+
+        // create shader and provide source code
+        vertexShaderObjectPV = GLES32.glCreateShader(GLES32.GL_VERTEX_SHADER);
+        GLES32.glShaderSource(vertexShaderObjectPV, vertexShaderSourceCodePV);
+
+        // compile shader and check errors
+        int[] iShaderCompileStatus = new int[1];
+        int[] iInfoLogLength       = new int[1];
+        String szInfoLog = null;
+
+        GLES32.glCompileShader(vertexShaderObjectPV);
+        GLES32.glGetShaderiv(vertexShaderObjectPV, GLES32.GL_COMPILE_STATUS, iShaderCompileStatus, 0);
+        if (iShaderCompileStatus[0] == GLES32.GL_FALSE) {
+            GLES32.glGetShaderiv(vertexShaderObjectPV, GLES32.GL_INFO_LOG_LENGTH, iInfoLogLength, 0);
+            if (iInfoLogLength[0] > 0) {
+                szInfoLog = GLES32.glGetShaderInfoLog(vertexShaderObjectPV);
+                System.out.println("RMC: Per Vertex Vertex Shader Compile Log: \n" + szInfoLog);
+                uninitialize();
+                System.exit(0);
+            }
+        }
+
+        // fragment shader
+        final String fragmentShaderSourceCodePV = String.format(
+            "#version 320 es \n" +
+            "precision highp float; \n" +
+
+            "in vec3 out_PhongLight; \n" +
+            "out vec4 FragColor; \n" +
+
+            "void main (void) \n" +
+            "{ \n" +
+            "	FragColor = vec4(out_PhongLight, 1.0); \n" +
+            "} \n"
+        );
+
+        // create shader and provide source code
+        fragmentShaderObjectPV = GLES32.glCreateShader(GLES32.GL_FRAGMENT_SHADER);
+        GLES32.glShaderSource(fragmentShaderObjectPV, fragmentShaderSourceCodePV);
+
+        // compile shader and check errors
+        iShaderCompileStatus[0] = 0;
+        iInfoLogLength[0]       = 0;
+        szInfoLog = null;
+
+        GLES32.glCompileShader(fragmentShaderObjectPV);
+        GLES32.glGetShaderiv(fragmentShaderObjectPV, GLES32.GL_COMPILE_STATUS, iShaderCompileStatus, 0);
+        if (iShaderCompileStatus[0] == GLES32.GL_FALSE) {
+            GLES32.glGetShaderiv(fragmentShaderObjectPV, GLES32.GL_INFO_LOG_LENGTH, iInfoLogLength, 0);
+            if (iInfoLogLength[0] > 0) {
+                szInfoLog = GLES32.glGetShaderInfoLog(fragmentShaderObjectPV);
+                System.out.println("RMC: Per Vertex Fragment Shader Compile Log: \n" + szInfoLog);
+                uninitialize();
+                System.exit(0);
+            }
+        }
+
+        // shader program
+        shaderProgramObjectPV = GLES32.glCreateProgram();
+
+        // attach shaders 
+        GLES32.glAttachShader(shaderProgramObjectPV, vertexShaderObjectPV);
+        GLES32.glAttachShader(shaderProgramObjectPV, fragmentShaderObjectPV);
+
+        // pre-linking binding to vertex attribute
+        GLES32.glBindAttribLocation(shaderProgramObjectPV, GLESMacros.RMC_ATTRIBUTE_POSITION, "vPosition");
+        GLES32.glBindAttribLocation(shaderProgramObjectPV, GLESMacros.RMC_ATTRIBUTE_NORMAL, "vNormal");
+
+        // link shader program and check errors
+        int[] iShaderProgramLinkStatus = new int[1];
+        iInfoLogLength[0] = 0;
+        szInfoLog = null;
+
+        GLES32.glLinkProgram(shaderProgramObjectPV);
+        GLES32.glGetProgramiv(shaderProgramObjectPV, GLES32.GL_LINK_STATUS, iShaderProgramLinkStatus, 0);
+        if (iShaderProgramLinkStatus[0] == GLES32.GL_FALSE) {
+            GLES32.glGetProgramiv(shaderProgramObjectPV, GLES32.GL_INFO_LOG_LENGTH, iInfoLogLength, 0);
+            if (iInfoLogLength[0] > 0) {
+                szInfoLog = GLES32.glGetProgramInfoLog(shaderProgramObjectPV);
+                System.out.println("RMC: Per Vertex Program Compile Log: \n" + szInfoLog);
+                uninitialize();
+                System.exit(0);
+            }
+        }
+
+        // get uniforms
+        mUniformPV = GLES32.glGetUniformLocation(shaderProgramObjectPV, "u_mMatrix");
+        vUniformPV = GLES32.glGetUniformLocation(shaderProgramObjectPV, "u_vMatrix");
+        pUniformPV = GLES32.glGetUniformLocation(shaderProgramObjectPV, "u_pMatrix");
+
+        for (int i = 0; i < 3; i++) {
+            laUniformPV[i] = GLES32.glGetUniformLocation(shaderProgramObjectPV, "u_La["+i+"]");
+            ldUniformPV[i] = GLES32.glGetUniformLocation(shaderProgramObjectPV, "u_Ld["+i+"]");
+            lsUniformPV[i] = GLES32.glGetUniformLocation(shaderProgramObjectPV, "u_Ls["+i+"]");
+            lightPositionUniformPV[i] = GLES32.glGetUniformLocation(shaderProgramObjectPV, "u_LightPos["+i+"]");
+        }
+
+        kaUniformPV = GLES32.glGetUniformLocation(shaderProgramObjectPV, "u_Ka");
+        kdUniformPV = GLES32.glGetUniformLocation(shaderProgramObjectPV, "u_Kd");
+        ksUniformPV = GLES32.glGetUniformLocation(shaderProgramObjectPV, "u_Ks");
+
+        shininessUniformPV = GLES32.glGetUniformLocation(shaderProgramObjectPV, "u_Shininess");
+        enableLightUniformPV = GLES32.glGetUniformLocation(shaderProgramObjectPV, "u_bLight");
+
+        ////////////////////////////////////////////////////////////////////////
+
+        //// P E R  F R A G M E N T  S H A D E R ///////////////////////////////
+        // vertex shader
+        final String vertexShaderSourceCodePF = String.format(
+            "#version 320 es \n" +
+            "precision lowp int; \n" +
+
+            "in vec4 vPosition; \n" +
+            "in vec3 vNormal; \n" +
+
+            "uniform mat4 u_mMatrix; \n" +
+            "uniform mat4 u_vMatrix; \n" +
+            "uniform mat4 u_pMatrix; \n" +
+
+            "uniform vec4 u_LightPos[3]; \n" +
             "uniform int u_bLight; \n" +
 
             "out vec3 tNorm; \n" +
-            "out vec3 lightDir; \n" +
+            "out vec3 lightDir[3]; \n" +
             "out vec3 viewerVector; \n" +
 
             "void main (void) \n" +
@@ -184,47 +367,50 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
             "	{ \n" +
             "		vec4 eyeCoordinates = u_vMatrix * u_mMatrix * vPosition; \n" +
             "		tNorm = mat3(u_vMatrix * u_mMatrix) * vNormal; \n" +
-            "		lightDir = vec3(u_LightPos - eyeCoordinates); \n" +
             "		viewerVector = normalize(vec3(-eyeCoordinates.xyz)); \n" +
+            "		for (int i = 0; i < 3; i++) \n" +
+            "		{ \n" +
+            "			lightDir[i] = vec3(u_LightPos[i] - eyeCoordinates); \n" +
+            "		} \n" +
             "	} \n" +
             "	gl_Position = u_pMatrix * u_vMatrix * u_mMatrix * vPosition; \n" +
             "} \n"
         );
 
         // create shader and provide source code
-        vertexShaderObject = GLES32.glCreateShader(GLES32.GL_VERTEX_SHADER);
-        GLES32.glShaderSource(vertexShaderObject, vertexShaderSourceCode);
+        vertexShaderObjectPF = GLES32.glCreateShader(GLES32.GL_VERTEX_SHADER);
+        GLES32.glShaderSource(vertexShaderObjectPF, vertexShaderSourceCodePF);
 
         // compile shader and check errors
-        int[] iShaderCompileStatus = new int[1];
-        int[] iInfoLogLength       = new int[1];
-        String szInfoLog = null;
+        iShaderCompileStatus = new int[1];
+        iInfoLogLength       = new int[1];
+        szInfoLog = null;
 
-        GLES32.glCompileShader(vertexShaderObject);
-        GLES32.glGetShaderiv(vertexShaderObject, GLES32.GL_COMPILE_STATUS, iShaderCompileStatus, 0);
+        GLES32.glCompileShader(vertexShaderObjectPF);
+        GLES32.glGetShaderiv(vertexShaderObjectPF, GLES32.GL_COMPILE_STATUS, iShaderCompileStatus, 0);
         if (iShaderCompileStatus[0] == GLES32.GL_FALSE) {
-            GLES32.glGetShaderiv(vertexShaderObject, GLES32.GL_INFO_LOG_LENGTH, iInfoLogLength, 0);
+            GLES32.glGetShaderiv(vertexShaderObjectPF, GLES32.GL_INFO_LOG_LENGTH, iInfoLogLength, 0);
             if (iInfoLogLength[0] > 0) {
-                szInfoLog = GLES32.glGetShaderInfoLog(vertexShaderObject);
-                System.out.println("RMC: Vertex Shader Compile Log: \n" + szInfoLog);
+                szInfoLog = GLES32.glGetShaderInfoLog(vertexShaderObjectPF);
+                System.out.println("RMC: Per Fragment Vertex Shader Compile Log: \n" + szInfoLog);
                 uninitialize();
                 System.exit(0);
             }
         }
 
         // fragment shader
-        final String fragmentShaderSourceCode = String.format(
+        final String fragmentShaderSourceCodePF = String.format(
             "#version 320 es \n" +
             "precision highp float; \n" +
             "precision lowp int; \n" +
 
             "in vec3 tNorm; \n" +
-            "in vec3 lightDir; \n" +
+            "in vec3 lightDir[3]; \n" +
             "in vec3 viewerVector; \n" +
 
-            "uniform vec3 u_La; \n" +
-            "uniform vec3 u_Ld; \n" +
-            "uniform vec3 u_Ls; \n" +
+            "uniform vec3 u_La[3]; \n" +
+            "uniform vec3 u_Ld[3]; \n" +
+            "uniform vec3 u_Ls[3]; \n" +
             "uniform vec3 u_Ka; \n" +
             "uniform vec3 u_Kd; \n" +
             "uniform vec3 u_Ks; \n" +
@@ -238,18 +424,22 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
             "{ \n" +
             "	if (u_bLight == 1)" +
             "	{ \n" +
+            "		vec3 phongLight = vec3(0.0); \n" +
             "		vec3 normTNorm = normalize(tNorm); \n" +
-            "		vec3 normLightDir = normalize(lightDir); \n" +
             "		vec3 normViewerVector = normalize(viewerVector); \n" +
 
-            "		vec3 reflectionVector = reflect(-normLightDir, normTNorm); \n" +
-            "		float tNormDotLightDir = max(dot(normTNorm, normLightDir), 0.0); \n" +
+            "		for (int i = 0; i < 3; i++) \n" +
+            "		{ \n" +
+            "			vec3 normLightDir = normalize(lightDir[i]); \n" +
+            "			vec3 reflectionVector = reflect(-normLightDir, normTNorm); \n" +
+            "			float tNormDotLightDir = max(dot(normTNorm, normLightDir), 0.0); \n" +
 
-            "		vec3 ambient = u_La * u_Ka; \n" +
-            "		vec3 diffuse = u_Ld * u_Kd * tNormDotLightDir; \n" +
-            "		vec3 specular = u_Ls * u_Ks * pow(max(dot(reflectionVector, normViewerVector), 0.0), u_Shininess); \n" +
-            "		vec3 phongLight = ambient + diffuse + specular; \n" +
+            "			vec3 ambient = u_La[i] * u_Ka; \n" +
+            "			vec3 diffuse = u_Ld[i] * u_Kd * tNormDotLightDir; \n" +
+            "			vec3 specular = u_Ls[i] * u_Ks * pow(max(dot(reflectionVector, normViewerVector), 0.0), u_Shininess); \n" +
+            "			phongLight += ambient + diffuse + specular; \n" +
 
+            "		} \n" +
             "		FragColor = vec4(phongLight, 1.0); \n" +
             "	} \n" +
             "	else \n" +
@@ -260,70 +450,74 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
         );
 
         // create shader and provide source code
-        fragmentShaderObject = GLES32.glCreateShader(GLES32.GL_FRAGMENT_SHADER);
-        GLES32.glShaderSource(fragmentShaderObject, fragmentShaderSourceCode);
+        fragmentShaderObjectPF = GLES32.glCreateShader(GLES32.GL_FRAGMENT_SHADER);
+        GLES32.glShaderSource(fragmentShaderObjectPF, fragmentShaderSourceCodePF);
 
         // compile shader and check errors
         iShaderCompileStatus[0] = 0;
         iInfoLogLength[0]       = 0;
         szInfoLog = null;
 
-        GLES32.glCompileShader(fragmentShaderObject);
-        GLES32.glGetShaderiv(fragmentShaderObject, GLES32.GL_COMPILE_STATUS, iShaderCompileStatus, 0);
+        GLES32.glCompileShader(fragmentShaderObjectPF);
+        GLES32.glGetShaderiv(fragmentShaderObjectPF, GLES32.GL_COMPILE_STATUS, iShaderCompileStatus, 0);
         if (iShaderCompileStatus[0] == GLES32.GL_FALSE) {
-            GLES32.glGetShaderiv(fragmentShaderObject, GLES32.GL_INFO_LOG_LENGTH, iInfoLogLength, 0);
+            GLES32.glGetShaderiv(fragmentShaderObjectPF, GLES32.GL_INFO_LOG_LENGTH, iInfoLogLength, 0);
             if (iInfoLogLength[0] > 0) {
-                szInfoLog = GLES32.glGetShaderInfoLog(fragmentShaderObject);
-                System.out.println("RMC: Fragment Shader Compile Log: \n" + szInfoLog);
+                szInfoLog = GLES32.glGetShaderInfoLog(fragmentShaderObjectPF);
+                System.out.println("RMC: Per Fragment Fragment Shader Compile Log: \n" + szInfoLog);
                 uninitialize();
                 System.exit(0);
             }
         }
 
         // shader program
-        shaderProgramObject = GLES32.glCreateProgram();
+        shaderProgramObjectPF = GLES32.glCreateProgram();
 
         // attach shaders 
-        GLES32.glAttachShader(shaderProgramObject, vertexShaderObject);
-        GLES32.glAttachShader(shaderProgramObject, fragmentShaderObject);
+        GLES32.glAttachShader(shaderProgramObjectPF, vertexShaderObjectPF);
+        GLES32.glAttachShader(shaderProgramObjectPF, fragmentShaderObjectPF);
 
         // pre-linking binding to vertex attribute
-        GLES32.glBindAttribLocation(shaderProgramObject, GLESMacros.RMC_ATTRIBUTE_POSITION, "vPosition");
-        GLES32.glBindAttribLocation(shaderProgramObject, GLESMacros.RMC_ATTRIBUTE_NORMAL, "vNormal");
+        GLES32.glBindAttribLocation(shaderProgramObjectPF, GLESMacros.RMC_ATTRIBUTE_POSITION, "vPosition");
+        GLES32.glBindAttribLocation(shaderProgramObjectPF, GLESMacros.RMC_ATTRIBUTE_NORMAL, "vNormal");
 
         // link shader program and check errors
-        int[] iShaderProgramLinkStatus = new int[1];
+        iShaderProgramLinkStatus = new int[1];
         iInfoLogLength[0] = 0;
         szInfoLog = null;
 
-        GLES32.glLinkProgram(shaderProgramObject);
-        GLES32.glGetProgramiv(shaderProgramObject, GLES32.GL_LINK_STATUS, iShaderProgramLinkStatus, 0);
+        GLES32.glLinkProgram(shaderProgramObjectPF);
+        GLES32.glGetProgramiv(shaderProgramObjectPF, GLES32.GL_LINK_STATUS, iShaderProgramLinkStatus, 0);
         if (iShaderProgramLinkStatus[0] == GLES32.GL_FALSE) {
-            GLES32.glGetProgramiv(shaderProgramObject, GLES32.GL_INFO_LOG_LENGTH, iInfoLogLength, 0);
+            GLES32.glGetProgramiv(shaderProgramObjectPF, GLES32.GL_INFO_LOG_LENGTH, iInfoLogLength, 0);
             if (iInfoLogLength[0] > 0) {
-                szInfoLog = GLES32.glGetProgramInfoLog(shaderProgramObject);
-                System.out.println("RMC: Program Compile Log: \n" + szInfoLog);
+                szInfoLog = GLES32.glGetProgramInfoLog(shaderProgramObjectPF);
+                System.out.println("RMC: Per Fragment Program Compile Log: \n" + szInfoLog);
                 uninitialize();
                 System.exit(0);
             }
         }
 
         // get uniforms
-        mUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_mMatrix");
-        vUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_vMatrix");
-        pUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_pMatrix");
+        mUniformPF = GLES32.glGetUniformLocation(shaderProgramObjectPF, "u_mMatrix");
+        vUniformPF = GLES32.glGetUniformLocation(shaderProgramObjectPF, "u_vMatrix");
+        pUniformPF = GLES32.glGetUniformLocation(shaderProgramObjectPF, "u_pMatrix");
 
-        laUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_La");
-        ldUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_Ld");
-        lsUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_Ls");
+        for (int i = 0; i < 3; i++) {
+            laUniformPF[i] = GLES32.glGetUniformLocation(shaderProgramObjectPF, "u_La["+i+"]");
+            ldUniformPF[i] = GLES32.glGetUniformLocation(shaderProgramObjectPF, "u_Ld["+i+"]");
+            lsUniformPF[i] = GLES32.glGetUniformLocation(shaderProgramObjectPF, "u_Ls["+i+"]");
+            lightPositionUniformPF[i] = GLES32.glGetUniformLocation(shaderProgramObjectPF, "u_LightPos["+i+"]");
+        }
 
-        kaUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_Ka");
-        kdUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_Kd");
-        ksUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_Ks");
+        kaUniformPF = GLES32.glGetUniformLocation(shaderProgramObjectPF, "u_Ka");
+        kdUniformPF = GLES32.glGetUniformLocation(shaderProgramObjectPF, "u_Kd");
+        ksUniformPF = GLES32.glGetUniformLocation(shaderProgramObjectPF, "u_Ks");
 
-        shininessUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_Shininess");
-        enableLightUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_bLight");
-        lightPositionUniform = GLES32.glGetUniformLocation(shaderProgramObject, "u_LightPos");
+        shininessUniformPF = GLES32.glGetUniformLocation(shaderProgramObjectPF, "u_Shininess");
+        enableLightUniformPF = GLES32.glGetUniformLocation(shaderProgramObjectPF, "u_bLight");
+
+        ////////////////////////////////////////////////////////////////////////
 
         // vertex array
         Sphere sphere = new Sphere();
@@ -391,6 +585,80 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
 
         GLES32.glBindVertexArray(0);
 
+        // light configurations
+        lights[0] = new Light();
+        lights[1] = new Light();
+        lights[2] = new Light();
+
+        // RED light
+        lights[0].lightAmbient[0] = 0.0f;
+        lights[0].lightAmbient[1] = 0.0f;
+        lights[0].lightAmbient[2] = 0.0f;
+        lights[0].lightAmbient[3] = 1.0f;
+
+        lights[0].lightDiffuse[0] = 1.0f;
+        lights[0].lightDiffuse[1] = 0.0f;
+        lights[0].lightDiffuse[2] = 0.0f;
+        lights[0].lightDiffuse[3] = 1.0f;
+
+        lights[0].lightSpecular[0] = 1.0f;
+        lights[0].lightSpecular[1] = 0.0f;
+        lights[0].lightSpecular[2] = 0.0f;
+        lights[0].lightSpecular[3] = 1.0f;
+
+        lights[0].lightPosition[0] = 0.0f;
+        lights[0].lightPosition[1] = 0.0f;
+        lights[0].lightPosition[2] = 0.0f;
+        lights[0].lightPosition[3] = 1.0f;
+
+        lights[0].angle = 0.0f;
+
+        // GREEN light
+        lights[1].lightAmbient[0] = 0.0f;
+        lights[1].lightAmbient[1] = 0.0f;
+        lights[1].lightAmbient[2] = 0.0f;
+        lights[1].lightAmbient[3] = 1.0f;
+
+        lights[1].lightDiffuse[0] = 0.0f;
+        lights[1].lightDiffuse[1] = 1.0f;
+        lights[1].lightDiffuse[2] = 0.0f;
+        lights[1].lightDiffuse[3] = 1.0f;
+
+        lights[1].lightSpecular[0] = 0.0f;
+        lights[1].lightSpecular[1] = 1.0f;
+        lights[1].lightSpecular[2] = 0.0f;
+        lights[1].lightSpecular[3] = 1.0f;
+
+        lights[1].lightPosition[0] = 0.0f;
+        lights[1].lightPosition[1] = 0.0f;
+        lights[1].lightPosition[2] = 0.0f;
+        lights[1].lightPosition[3] = 1.0f;
+
+        lights[1].angle = 0.0f;
+
+        // BLUE light
+        lights[2].lightAmbient[0] = 0.0f;
+        lights[2].lightAmbient[1] = 0.0f;
+        lights[2].lightAmbient[2] = 0.0f;
+        lights[2].lightAmbient[3] = 1.0f;
+
+        lights[2].lightDiffuse[0] = 0.0f;
+        lights[2].lightDiffuse[1] = 0.0f;
+        lights[2].lightDiffuse[2] = 1.0f;
+        lights[2].lightDiffuse[3] = 1.0f;
+
+        lights[2].lightSpecular[0] = 0.0f;
+        lights[2].lightSpecular[1] = 0.0f;
+        lights[2].lightSpecular[2] = 1.0f;
+        lights[2].lightSpecular[3] = 1.0f;
+
+        lights[2].lightPosition[0] = 0.0f;
+        lights[2].lightPosition[1] = 0.0f;
+        lights[2].lightPosition[2] = 0.0f;
+        lights[2].lightPosition[3] = 1.0f;
+
+        lights[2].angle = 0.0f;
+
         // clear color
         GLES32.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
@@ -421,9 +689,6 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
     private void draw() {
         GLES32.glClear(GLES32.GL_COLOR_BUFFER_BIT | GLES32.GL_DEPTH_BUFFER_BIT);
 
-        // start using OpenGL program object
-        GLES32.glUseProgram(shaderProgramObject);
-
         //declaration of matrices
         float[] translateMatrix = new float[16];
         float[] modelMatrix = new float[16];
@@ -438,26 +703,59 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
         Matrix.translateM(translateMatrix, 0, 0.0f, 0.0f, -3.0f);
         modelMatrix = translateMatrix;
 
-        // send necessary to shader in respective uniforms
-        GLES32.glUniformMatrix4fv(mUniform, 1, false, modelMatrix, 0);
-        GLES32.glUniformMatrix4fv(vUniform, 1, false, viewMatrix, 0);
-        GLES32.glUniformMatrix4fv(pUniform, 1, false, perspectiveProjectionMatrix, 0);
+        if (bFragment) {
+            GLES32.glUseProgram(shaderProgramObjectPF);
+        
+            // send necessary to shader in respective uniforms
+            GLES32.glUniformMatrix4fv(mUniformPF, 1, false, modelMatrix, 0);
+            GLES32.glUniformMatrix4fv(vUniformPF, 1, false, viewMatrix, 0);
+            GLES32.glUniformMatrix4fv(pUniformPF, 1, false, perspectiveProjectionMatrix, 0);
 
-        if (bLight) {
-            GLES32.glUniform3f(laUniform, 0.0f, 0.0f, 0.0f);
-            GLES32.glUniform3f(ldUniform, 1.0f, 1.0f, 1.0f);
-            GLES32.glUniform3f(lsUniform, 1.0f, 1.0f, 1.0f);
-            GLES32.glUniform4f(lightPositionUniform, 100.0f, 100.0f, 100.0f, 1.0f);
-            
-            GLES32.glUniform3f(kaUniform, 0.0f, 0.0f, 0.0f);
-            GLES32.glUniform3f(kdUniform, 0.5f, 0.2f, 0.7f);
-            GLES32.glUniform3f(ksUniform, 0.7f, 0.7f, 0.7f);
-            GLES32.glUniform1f(shininessUniform, 128.0f);
+            if (bLight) {
+                for (int i = 0; i < 3; i++) {
+                    GLES32.glUniform3fv(laUniformPF[i], 1, lights[i].lightAmbient, 0);
+                    GLES32.glUniform3fv(ldUniformPF[i], 1, lights[i].lightDiffuse, 0);
+                    GLES32.glUniform3fv(lsUniformPF[i], 1, lights[i].lightSpecular, 0);
+                    GLES32.glUniform4fv(lightPositionUniformPF[i], 1, lights[i].lightPosition, 0);
+                }
+                
+                GLES32.glUniform3f(kaUniformPF, 0.0f, 0.0f, 0.0f);
+                GLES32.glUniform3f(kdUniformPF, 1.0f, 1.0f, 1.0f);
+                GLES32.glUniform3f(ksUniformPF, 1.0f, 1.0f, 1.0f);
+                GLES32.glUniform1f(shininessUniformPF, 128.0f);
 
-            GLES32.glUniform1i(enableLightUniform, 1);
-        }
-        else {
-            GLES32.glUniform1i(enableLightUniform, 0);
+                GLES32.glUniform1i(enableLightUniformPF, 1);
+            }
+            else {
+                GLES32.glUniform1i(enableLightUniformPF, 0);
+            }
+
+        } else {
+            GLES32.glUseProgram(shaderProgramObjectPV);
+        
+            // send necessary to shader in respective uniforms
+            GLES32.glUniformMatrix4fv(mUniformPV, 1, false, modelMatrix, 0);
+            GLES32.glUniformMatrix4fv(vUniformPV, 1, false, viewMatrix, 0);
+            GLES32.glUniformMatrix4fv(pUniformPV, 1, false, perspectiveProjectionMatrix, 0);
+
+            if (bLight) {
+                for (int i = 0; i < 3; i++) {
+                    GLES32.glUniform3fv(laUniformPV[i], 1, lights[i].lightAmbient, 0);
+                    GLES32.glUniform3fv(ldUniformPV[i], 1, lights[i].lightDiffuse, 0);
+                    GLES32.glUniform3fv(lsUniformPV[i], 1, lights[i].lightSpecular, 0);
+                    GLES32.glUniform4fv(lightPositionUniformPV[i], 1, lights[i].lightPosition, 0);
+                }
+
+                GLES32.glUniform3f(kaUniformPV, 0.0f, 0.0f, 0.0f);
+                GLES32.glUniform3f(kdUniformPV, 1.0f, 1.0f, 1.0f);
+                GLES32.glUniform3f(ksUniformPV, 1.0f, 1.0f, 1.0f);
+                GLES32.glUniform1f(shininessUniformPV, 128.0f);
+
+                GLES32.glUniform1i(enableLightUniformPV, 1);
+            }
+            else {
+                GLES32.glUniform1i(enableLightUniformPV, 0);
+            }
         }
 
         // bind with vao (this will avoid many binding to vbo_vertex)
@@ -477,7 +775,27 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
     }
 
     private void update() {
-        
+        if (lights[0].angle < 360.0f) {
+            lights[0].angle += 0.02f;
+        } else {
+            lights[0].angle = 0.0f;
+        }
+
+        if (lights[1].angle < 360.0f) {
+            lights[1].angle += 0.02f;
+        } else {
+            lights[1].angle = 0.0f;
+        }
+
+        if (lights[2].angle < 360.0f) {
+            lights[2].angle += 0.02f;
+        } else {
+            lights[2].angle = 0.0f;
+        }
+
+        lights[0].lightPosition = new float[] {0.0f, 100.0f*(float)Math.cos(lights[0].angle), 100.0f*(float)Math.sin(lights[0].angle), 1.0f};
+        lights[1].lightPosition = new float[] {100.0f*(float)Math.cos(lights[1].angle), 0.0f, 100.0f*(float)Math.sin(lights[1].angle), 1.0f};
+        lights[2].lightPosition = new float[] {100.0f*(float)Math.cos(lights[2].angle), 100.0f*(float)Math.sin(lights[2].angle), 0.0f, 1.0f};
     }
 
     private void uninitialize() {
@@ -501,21 +819,38 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
             vboSphereElm[0] = 0;
         }
 
-        if (shaderProgramObject != 0) {
-            if (vertexShaderObject != 0) {
-                GLES32.glDetachShader(shaderProgramObject, vertexShaderObject);
-                GLES32.glDeleteShader(vertexShaderObject);
-                vertexShaderObject = 0;
+        if (shaderProgramObjectPF != 0) {
+            if (vertexShaderObjectPF != 0) {
+                GLES32.glDetachShader(shaderProgramObjectPF, vertexShaderObjectPF);
+                GLES32.glDeleteShader(vertexShaderObjectPF);
+                vertexShaderObjectPF = 0;
             }
 
-            if (fragmentShaderObject != 0) {
-                GLES32.glDetachShader(shaderProgramObject, fragmentShaderObject);
-                GLES32.glDeleteShader(fragmentShaderObject);
-                fragmentShaderObject = 0;
+            if (fragmentShaderObjectPF != 0) {
+                GLES32.glDetachShader(shaderProgramObjectPF, fragmentShaderObjectPF);
+                GLES32.glDeleteShader(fragmentShaderObjectPF);
+                fragmentShaderObjectPF = 0;
             }
 
-            GLES32.glDeleteProgram(shaderProgramObject);
-            shaderProgramObject = 0;
+            GLES32.glDeleteProgram(shaderProgramObjectPF);
+            shaderProgramObjectPF = 0;
+        }
+
+        if (shaderProgramObjectPV != 0) {
+            if (vertexShaderObjectPV != 0) {
+                GLES32.glDetachShader(shaderProgramObjectPV, vertexShaderObjectPV);
+                GLES32.glDeleteShader(vertexShaderObjectPV);
+                vertexShaderObjectPV = 0;
+            }
+
+            if (fragmentShaderObjectPV != 0) {
+                GLES32.glDetachShader(shaderProgramObjectPV, fragmentShaderObjectPV);
+                GLES32.glDeleteShader(fragmentShaderObjectPV);
+                fragmentShaderObjectPV = 0;
+            }
+
+            GLES32.glDeleteProgram(shaderProgramObjectPV);
+            shaderProgramObjectPV = 0;
         }
     }
 }
