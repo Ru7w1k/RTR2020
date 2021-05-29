@@ -433,7 +433,7 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
 
         Matrix.perspectiveM(perspectiveProjectionMatrix, 0,
                 45.0f,
-                (float)width/(float)height,
+                ((float)width / 6.0f) / ((float)height / 4.0f),
                 0.1f, 100.0f
             );
     }
@@ -455,10 +455,12 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
         Matrix.setIdentityM(viewMatrix, 0);
 
         // translation transformation
-        Matrix.translateM(translateMatrix, 0, 0.0f, 0.0f, -3.0f);
+        Matrix.translateM(translateMatrix, 0, 0.0f, 0.0f, -2.5f);
         modelMatrix = translateMatrix;
 
         // send necessary to shader in respective uniforms
+        GLES32.glUniformMatrix4fv(mUniform, 1, false, modelMatrix, 0);
+        GLES32.glUniformMatrix4fv(vUniform, 1, false, viewMatrix, 0);
         GLES32.glUniformMatrix4fv(pUniform, 1, false, perspectiveProjectionMatrix, 0);
 
         if (bLight) {
@@ -480,11 +482,6 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
                     break;
             }
             
-            GLES32.glUniform3f(kaUniform, 0.0f, 0.0f, 0.0f);
-            GLES32.glUniform3f(kdUniform, 0.5f, 0.2f, 0.7f);
-            GLES32.glUniform3f(ksUniform, 0.7f, 0.7f, 0.7f);
-            GLES32.glUniform1f(shininessUniform, 128.0f);
-
             GLES32.glUniform1i(enableLightUniform, 1);
         }
         else {
@@ -502,9 +499,6 @@ public class GLESView extends GLSurfaceView implements GLSurfaceView.Renderer, O
                     (int) (j * (float)gHeight / 4.0f),
                     (int) ((float)gWidth / 6.0f),
                     (int) ((float)gHeight / 4.0f));
-
-                GLES32.glUniformMatrix4fv(mUniform, 1, false, modelMatrix, 0);
-                GLES32.glUniformMatrix4fv(pUniform, 1, false, perspectiveProjectionMatrix, 0);
 
                 GLES32.glUniform3fv(kaUniform, 1, materials[i][j].MaterialAmbient, 0);
                 GLES32.glUniform3fv(kdUniform, 1, materials[i][j].MaterialDiffuse, 0);
