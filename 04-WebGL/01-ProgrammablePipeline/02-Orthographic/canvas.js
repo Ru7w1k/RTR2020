@@ -154,7 +154,7 @@ function init() {
     gl.attachShader(shaderProgramObject, fragmentShaderObject);
 
     // pre-linking binding of shader program object with vertex shader attributes
-    gl.bindAttribLocation(shaderProgramObject, WebGLMacros.RMC_ATTRIBUTE_VERTEX, "vPosition");
+    gl.bindAttribLocation(shaderProgramObject, WebGLMacros.RMC_ATTRIBUTE_POSITION, "vPosition");
 
     // linking
     gl.linkProgram(shaderProgramObject);
@@ -182,8 +182,8 @@ function init() {
     vbo = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
     gl.bufferData(gl.ARRAY_BUFFER, triangleVertices, gl.STATIC_DRAW);
-    gl.vertexAttribPointer(WebGLMacros.RMC_ATTRIBUTE_VERTEX, 3, gl.FLOAT, false, 0, 0);
-    gl.enableVertexAttribArray(WebGLMacros.RMC_ATTRIBUTE_VERTEX);
+    gl.vertexAttribPointer(WebGLMacros.RMC_ATTRIBUTE_POSITION, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(WebGLMacros.RMC_ATTRIBUTE_POSITION);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
     gl.bindVertexArray(null);

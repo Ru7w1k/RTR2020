@@ -158,7 +158,7 @@ function init() {
     gl.attachShader(shaderProgramObject, fragmentShaderObject);
 
     // pre-linking binding of shader program object with vertex shader attributes
-    gl.bindAttribLocation(shaderProgramObject, WebGLMacros.RMC_ATTRIBUTE_VERTEX, "vPosition");
+    gl.bindAttribLocation(shaderProgramObject, WebGLMacros.RMC_ATTRIBUTE_POSITION, "vPosition");
 
     // linking
     gl.linkProgram(shaderProgramObject);
@@ -176,9 +176,9 @@ function init() {
     // vertex, colors, shader attribs, vbo, vao initalizations
     var quadVertices = new Float32Array([
         1.0, 1.0, 0.0,
-        1.0, -1.0, 0.0
-        -1.0, -1.0, 0.0,
-        -1.0, 1.0, 0.0
+        1.0, -1.0, 0.0,
+        - 1.0, -1.0, 0.0,
+        -1.0, 1.0, 0.0,
     ]);
 
     vao = gl.createVertexArray();
