@@ -203,6 +203,12 @@ int main(int argc, char *argv[]) {
   // get OpenGL context and make it current context
   [[self openGLContext] makeCurrentContext];
 
+  // fetch OpenGL related details
+  fprintf(gpFile, "OpenGL Vendor:   %s\n", glGetString(GL_VENDOR));
+  fprintf(gpFile, "OpenGL Renderer: %s\n", glGetString(GL_RENDERER));
+  fprintf(gpFile, "OpenGL Version:  %s\n", glGetString(GL_VERSION));
+  fprintf(gpFile, "GLSL Version:    %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
+
   // swap interval
   GLint swapInt = 1;
   [[self openGLContext] setValues:&swapInt forParameter:NSOpenGLCPSwapInterval];
