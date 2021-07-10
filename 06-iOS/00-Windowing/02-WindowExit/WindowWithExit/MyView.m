@@ -83,8 +83,8 @@
 
 - (void)onSwipe:(UISwipeGestureRecognizer *)gr {
   // code
-  centralText = @"Swipe";
-  [self setNeedsDisplay];
+  [self release];
+  exit(0);
 }
 
 - (void)onLongPress:(UIGestureRecognizer *)gr {
