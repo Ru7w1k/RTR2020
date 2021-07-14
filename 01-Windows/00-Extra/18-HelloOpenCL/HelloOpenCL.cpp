@@ -4,19 +4,23 @@
 #include <stdlib.h> // exit()
 #include <string.h> // strlen()
 
-
+#ifdef __APPLE__
+#include <OpenCL/opencl.h>
+#else
 #include <CL/opencl.h>
+#endif
 
 #include "helper_timer.h"
 
 // global OpenCL variables
 cl_int ret_ocl;
 cl_platform_id oclPlatformID;
-cl_device_id oclComputeDeviceID;  // compute device id
-cl_context oclContext;            // compute context
-cl_command_queue oclCommandQueue; // compute command queue
-cl_program oclProgram;            // compute program
-cl_kernel oclKernel;              // compute kernel
+cl_device_id oclComputeDeviceIDs[10]; // compute device id
+cl_context oclContext;                // compute context
+cl_command_queue oclCommandQueue;     // compute command queue
+cl_program oclProgram;                // compute program
+cl_kernel oclKernel;                  // compute kernel
+cl_uint numComputeDevices;
 
 char *oclSourceCode = NULL;
 size_t sizeKernelCodeLength;
@@ -41,9 +45,7 @@ float timeOnGPU;
 int main(void) {
   // function declarations
   void fillFloatArrayWithRandomNumbers(float *, int);
-  size_t roundGlobalSizeToNearestMultipleOfLocalSize(int, unsigned int);
-  void vecAddHost(const float *, const float *, float *, int);
-  char *loadOclProgramSource(const char *, const char *, size_t *);
+  void run(cl_device_id);
   void cleanup(void);
 
   // code
@@ -95,8 +97,8 @@ int main(void) {
   }
 
   // get OpenCL supporting GPU device's ID
-  ret_ocl = clGetDeviceIDs(oclPlatformID, CL_DEVICE_TYPE_GPU, 1,
-                           &oclComputeDeviceID, NULL);
+  ret_ocl = clGetDeviceIDs(oclPlatformID, CL_DEVICE_TYPE_GPU, 10,
+                           oclComputeDeviceIDs, &numComputeDevices);
   if (ret_ocl != CL_SUCCESS) {
     printf("OpenCL Error - clGetDeviceIDs() Failed : %d. Exitting Now ...\n",
            ret_ocl);
@@ -104,6 +106,44 @@ int main(void) {
     exit(EXIT_FAILURE);
   }
 
+  for (int i = 0; i < (int)numComputeDevices; i++) {
+    printf("----- Device %d -------------------------------------------\n", i);
+    run(oclComputeDeviceIDs[i]);
+    printf("-----------------------------------------------------------\n");
+  }
+
+  // free allocated host-memory
+  if (hostInput1) {
+    free(hostInput1);
+    hostInput1 = NULL;
+  }
+
+  if (hostInput2) {
+    free(hostInput2);
+    hostInput2 = NULL;
+  }
+
+  if (hostOutput) {
+    free(hostOutput);
+    hostOutput = NULL;
+  }
+
+  if (gold) {
+    free(gold);
+    gold = NULL;
+  }
+
+  return (0);
+}
+
+void run(cl_device_id oclComputeDeviceID) {
+  // function declarations
+  size_t roundGlobalSizeToNearestMultipleOfLocalSize(int, unsigned int);
+  void vecAddHost(const float *, const float *, float *, int);
+  char *loadOclProgramSource(const char *, const char *, size_t *);
+  void cleanup(void);
+
+  // code
   char gpu_name[255];
   clGetDeviceInfo(oclComputeDeviceID, CL_DEVICE_NAME, sizeof(gpu_name),
                   &gpu_name, NULL);
@@ -367,8 +407,6 @@ int main(void) {
 
   // total cleanup
   cleanup();
-
-  return (0);
 }
 
 void cleanup(void) {
@@ -414,27 +452,6 @@ void cleanup(void) {
   if (deviceOutput) {
     clReleaseMemObject(deviceOutput);
     deviceOutput = NULL;
-  }
-
-  // free allocated host-memory
-  if (hostInput1) {
-    free(hostInput1);
-    hostInput1 = NULL;
-  }
-
-  if (hostInput2) {
-    free(hostInput2);
-    hostInput2 = NULL;
-  }
-
-  if (hostOutput) {
-    free(hostOutput);
-    hostOutput = NULL;
-  }
-
-  if (gold) {
-    free(gold);
-    gold = NULL;
   }
 }
 
