@@ -17,3 +17,5 @@
 **/.vscode
 *.app*
 *.log*
+07-Direct3D11/**/*.exe
+07-Direct3D11/**/*.obj
