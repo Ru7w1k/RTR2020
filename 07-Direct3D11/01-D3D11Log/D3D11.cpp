@@ -1,5 +1,6 @@
 // headers
 #include <d3d11.h> // ~ <gl/gl.h>
+#include <math.h>
 #include <stdio.h>
 
 // libraries
@@ -49,8 +50,11 @@ int main(void) {
                       255,                         // size of destination buffer
                       NULL, NULL);
 
-  printf("GPU:      %s\n", str);
-  printf("GPU VRAM: %I64d bytes\n", dxgiAdapterDesc.DedicatedVideoMemory);
+  printf("GPU      : %s\n", str);
+  printf("GPU VRAM : %I64d bytes\n",
+         (__int64)dxgiAdapterDesc.DedicatedVideoMemory);
+  printf("GPU VRAM : %d GB\n", (int)ceil(dxgiAdapterDesc.DedicatedVideoMemory /
+                                        1024.0 / 1024.0 / 1024.0));
 
 CLEANUP:
   if (pIDXGIAdapter) {
