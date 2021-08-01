@@ -1,0 +1,3 @@
+#include "D3D11.h"
+
+RMC_ICON	ICON	rmc_icon.ico
