@@ -246,16 +246,19 @@ int main(int argc, char *argv[]) {
   // create shader
   GLuint gVertexShaderObject = glCreateShader(GL_VERTEX_SHADER);
 
+  // clang-format off
   // provide source code to shader
-  const GLchar *vertexShaderSourceCode = "#version 450 core \n"
+  const GLchar *vertexShaderSourceCode =
+    "#version 410 core \n" \
 
-                                         "in vec4 vPosition; \n"
-                                         "uniform mat4 u_mvpMatrix; \n"
+    "in vec4 vPosition; \n" \
+    "uniform mat4 u_mvpMatrix; \n" \
 
-                                         "void main (void) \n"
-                                         "{ \n"
-                                         "	gl_Position = u_mvpMatrix * vPosition; \n"
-                                         "} \n";
+    "void main (void) \n" \
+    "{ \n" \
+    "	gl_Position = u_mvpMatrix * vPosition; \n" \
+    "} \n";
+  // clang-format on
 
   glShaderSource(gVertexShaderObject, 1, (const GLchar **)&vertexShaderSourceCode, NULL);
 
@@ -278,7 +281,8 @@ int main(int argc, char *argv[]) {
 
         fprintf(gpFile, "Vertex Shader Compiler Info Log: \n%s\n", szInfoLog);
         free(szInfoLog);
-        DestroyWindow(ghwnd);
+        [self release];
+        [NSApp terminate:self];
       }
     }
   }
@@ -287,15 +291,18 @@ int main(int argc, char *argv[]) {
   // create shader
   GLuint gFragmentShaderObject = glCreateShader(GL_FRAGMENT_SHADER);
 
+  // clang-format off
   // provide source code to shader
-  const GLchar *fragmentShaderSourceCode = "#version 450 core \n"
+  const GLchar *fragmentShaderSourceCode = 
+    "#version 410 core \n" \
 
-                                           "out vec4 FragColor; \n"
+    "out vec4 FragColor; \n" \
 
-                                           "void main (void) \n"
-                                           "{ \n"
-                                           "	FragColor = vec4(1.0, 1.0, 1.0, 1.0); \n"
-                                           "} \n";
+    "void main (void) \n" \
+    "{ \n" \
+    "	FragColor = vec4(1.0, 1.0, 1.0, 1.0); \n" \
+    "} \n";
+  // clang-format on
 
   glShaderSource(gFragmentShaderObject, 1, (const GLchar **)&fragmentShaderSourceCode, NULL);
 
@@ -318,7 +325,8 @@ int main(int argc, char *argv[]) {
 
         fprintf(gpFile, "Fragment Shader Compiler Info Log: \n%s\n", szInfoLog);
         free(szInfoLog);
-        DestroyWindow(ghwnd);
+        [self release];
+        [NSApp terminate:self];
       }
     }
   }
@@ -353,7 +361,8 @@ int main(int argc, char *argv[]) {
 
         fprintf(gpFile, ("Shader Program Linking Info Log: \n%s\n"), szInfoLog);
         free(szInfoLog);
-        DestroyWindow(ghwnd);
+        [self release];
+        [NSApp terminate:self];
       }
     }
   }
@@ -417,6 +426,17 @@ int main(int argc, char *argv[]) {
   }
   glViewport(0, 0, (GLsizei)rect.size.width, (GLsizei)rect.size.height);
 
+  if (rect.size.width < rect.size.height) {
+    orthographicProjectionMatrix =
+        vmath::ortho(-100.0f, 100.0f, -100.0f * ((float)rect.size.height / (float)rect.size.width),
+                     100.0f * ((float)rect.size.height / (float)rect.size.width), -100.0f, 100.0f);
+  } else {
+    orthographicProjectionMatrix =
+        vmath::ortho(-100.0f * ((float)rect.size.width / (float)rect.size.height),
+                     100.0f * ((float)rect.size.width / (float)rect.size.height), -100.0f, 100.0f,
+                     -100.0f, 100.0f);
+  }
+
   CGLUnlockContext((CGLContextObj)[[self openGLContext] CGLContextObj]);
 }
 
@@ -431,6 +451,35 @@ int main(int argc, char *argv[]) {
   CGLLockContext((CGLContextObj)[[self openGLContext] CGLContextObj]);
 
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+  // start using OpenGL program object
+  glUseProgram(gShaderProgramObject);
+
+  // declaration of matrices
+  mat4 modelViewMatrix;
+  mat4 modelViewProjectionMatrix;
+
+  // intialize above matrices to identity
+  modelViewMatrix = mat4::identity();
+  modelViewProjectionMatrix = mat4::identity();
+
+  // do necessary matrix multiplication
+  modelViewProjectionMatrix = orthographicProjectionMatrix * modelViewMatrix;
+
+  // send necessary matrices to shader in respective uniforms
+  glUniformMatrix4fv(mvpMatrixUniform, 1, GL_FALSE, modelViewProjectionMatrix);
+
+  // bind with vao (this will avoid many binding to vbo_vertex)
+  glBindVertexArray(vao);
+
+  // draw necessary scene
+  glDrawArrays(GL_TRIANGLES, 0, 3);
+
+  // unbind vao
+  glBindVertexArray(0);
+
+  // stop using OpenGL program object
+  glUseProgram(0);
 
   CGLFlushDrawable((CGLContextObj)[[self openGLContext] CGLContextObj]);
   CGLUnlockContext((CGLContextObj)[[self openGLContext] CGLContextObj]);
@@ -473,6 +522,45 @@ int main(int argc, char *argv[]) {
 
 - (void)dealloc {
   // code
+  if (vao) {
+    glDeleteVertexArrays(1, &vao);
+    vao = 0;
+  }
+
+  if (vbo) {
+    glDeleteBuffers(1, &vbo);
+    vbo = 0;
+  }
+
+  // destroy shader programs
+  if (gShaderProgramObject) {
+    GLsizei shaderCount;
+    GLsizei i;
+
+    glUseProgram(gShaderProgramObject);
+    glGetProgramiv(gShaderProgramObject, GL_ATTACHED_SHADERS, &shaderCount);
+
+    GLuint *pShaders = (GLuint *)malloc(shaderCount * sizeof(GLuint));
+    if (pShaders) {
+      glGetAttachedShaders(gShaderProgramObject, shaderCount, &shaderCount, pShaders);
+
+      for (i = 0; i < shaderCount; i++) {
+        // detach shader
+        glDetachShader(gShaderProgramObject, pShaders[i]);
+
+        // delete shader
+        glDeleteShader(pShaders[i]);
+        pShaders[i] = 0;
+      }
+
+      free(pShaders);
+    }
+
+    glDeleteProgram(gShaderProgramObject);
+    gShaderProgramObject = 0;
+    glUseProgram(0);
+  }
+
   CVDisplayLinkStop(displayLink);
   CVDisplayLinkRelease(displayLink);
 
