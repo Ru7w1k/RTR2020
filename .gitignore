@@ -19,3 +19,4 @@
 *.log*
 07-Direct3D11/**/*.exe
 07-Direct3D11/**/*.obj
+01-Windows/00-Extra/18-HelloOpenCL/HelloOpenCL
