@@ -410,7 +410,7 @@ HRESULT resize(int width, int height) {
                                   0);
 
   // dummy texture buffer for render target
-  ID3D11Texture2D *pID3D11Texture2D_BackBuffer;
+  ID3D11Texture2D *pID3D11Texture2D_BackBuffer = NULL;
   gpIDXGISwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D),
                               (LPVOID *)&pID3D11Texture2D_BackBuffer);
 
@@ -439,6 +439,8 @@ HRESULT resize(int width, int height) {
   d3d11Viewport.Height = (float)height;
   d3d11Viewport.MinDepth = 0.0f;
   d3d11Viewport.MaxDepth = 1.0f;
+
+  gpID3D11DeviceContext->RSSetViewports(1, &d3d11Viewport);
 
   return (hr);
 }
