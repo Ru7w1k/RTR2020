@@ -469,6 +469,8 @@ HRESULT initialize(void) {
   }
   LogD("VSSetShader() succeeded..\n");
 
+  //////////////////////////////////////////////////////////////////////////////
+
   ///// pixel shader
   // clang-format off
   const char *pixelShaderSourceCode = 
@@ -536,9 +538,9 @@ HRESULT initialize(void) {
   LogD("PSSetShader() succeeded..\n");
 
   // dont release vertex shader code blob yet, but we can release pixel shader
-  if (pID3DBlobVertexShaderCode) {
-    pID3DBlobVertexShaderCode->Release();
-    pID3DBlobVertexShaderCode = NULL;
+  if (pID3DBlobPixelShaderCode) {
+    pID3DBlobPixelShaderCode->Release();
+    pID3DBlobPixelShaderCode = NULL;
   }
 
   if (pID3DBlobError) {
@@ -548,11 +550,122 @@ HRESULT initialize(void) {
 
   //////////////////////////////////////////////////////////////////////////////
 
+  //// initialize input layout structure
+  D3D11_INPUT_ELEMENT_DESC inputElementDesc;
+  ZeroMemory((void *)&inputElementDesc, sizeof(D3D11_INPUT_ELEMENT_DESC));
+  inputElementDesc.SemanticName = "POSITION";  // ~ vPosition
+  inputElementDesc.SemanticIndex = 0;  // multiple data per semantic (like mat4)
+  inputElementDesc.Format = DXGI_FORMAT_R32G32B32_FLOAT;  //
+  inputElementDesc.AlignedByteOffset = 0;                 // offset
+  inputElementDesc.InputSlot = 0;  // ~ enum RMC_ATTRIBUTE_POSITION
+  inputElementDesc.InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;  // per vertex
+  inputElementDesc.InstanceDataStepRate = 0;  // useful if per instance data
+
+  // create input layout
+  hr = gpID3D11Device->CreateInputLayout(
+      &inputElementDesc,  // input layout arrat
+      1,                  // size of input layout array
+      pID3DBlobVertexShaderCode->GetBufferPointer(),  // shader input layout
+      pID3DBlobVertexShaderCode->GetBufferSize(),  // size of shader source code
+      &gpID3D11InputLayout                         // created input layout!
+  );
+
+  if (FAILED(hr)) {
+    LogD("CreateInputLayout() failed..\n");
+    if (pID3DBlobVertexShaderCode) {
+      pID3DBlobVertexShaderCode->Release();
+      pID3DBlobVertexShaderCode = NULL;
+    }
+    return (hr);
+  }
+
+  LogD("CreateInputLayout() succeeded..\n");
+  if (pID3DBlobVertexShaderCode) {
+    pID3DBlobVertexShaderCode->Release();
+    pID3DBlobVertexShaderCode = NULL;
+  }
+
+  // set input layout in pipeline
+  gpID3D11DeviceContext->IASetInputLayout(gpID3D11InputLayout);
+
+  //////////////////////////////////////////////////////////////////////////////
+
+  //// define geometry data
+  const float vertices[] = {
+      0.0f,   50.0f,  0.0f,  // apex
+      50.0f,  -50.0f, 0.0f,  // right
+      -50.0f, -50.0f, 0.0f   // left
+  };
+
+  // create vertex buffer
+  D3D11_BUFFER_DESC bufferDesc;
+  ZeroMemory(&bufferDesc, sizeof(D3D11_BUFFER_DESC));
+  bufferDesc.ByteWidth = sizeof(float) * _ARRAYSIZE(vertices);
+  bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+  bufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+  bufferDesc.Usage = D3D11_USAGE_DYNAMIC;
+
+  hr = gpID3D11Device->CreateBuffer(
+      &bufferDesc,                 // buffer desc
+      NULL,                        // subresource data (used in static buffer)
+      &gpID3D11BufferVertexBuffer  // vertex buffer !
+  );
+  if (FAILED(hr)) {
+    LogD("CreateBuffer() failed..\n");
+    return (hr);
+  }
+  LogD("CreateBuffer() succeeded..\n");
+
+  D3D11_MAPPED_SUBRESOURCE mappedSubresource;
+  ZeroMemory(&mappedSubresource, sizeof(D3D11_MAPPED_SUBRESOURCE));
+  gpID3D11DeviceContext->Map(gpID3D11BufferVertexBuffer,  // which buffer to map
+                             0,                           // which index to use
+                             D3D11_MAP_WRITE_DISCARD,     // how to map
+                             0,                  // map flags (do not wait)
+                             &mappedSubresource  // mapped pointer
+  );
+  memcpy(mappedSubresource.pData, vertices, sizeof(vertices));
+  gpID3D11DeviceContext->Unmap(gpID3D11BufferVertexBuffer, 0 /* index */);
+
+  // this buffer will be set in pipeline while drawing..
+
+  //////////////////////////////////////////////////////////////////////////////
+
+  //// define and set the constant buffer (~ uniforms)
+  D3D11_BUFFER_DESC bufferDescConstBufferDesc;
+  ZeroMemory(&bufferDescConstBufferDesc, sizeof(D3D11_BUFFER_DESC));
+  bufferDescConstBufferDesc.ByteWidth = sizeof(CBUFFER);
+  bufferDescConstBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+  bufferDescConstBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+
+  hr = gpID3D11Device->CreateBuffer(
+      &bufferDescConstBufferDesc,    // buffer desc
+      NULL,                          // subresource data (used in static buffer)
+      &gpID3D11BufferConstantBuffer  // constant buffer !
+  );
+  if (FAILED(hr)) {
+    LogD("CreateBuffer() failed for constant buffer..\n");
+    return (hr);
+  }
+  LogD("CreateBuffer() succeeded for constant buffer..\n");
+
+  // set constant buffer in pipeline
+  gpID3D11DeviceContext->VSSetConstantBuffers(
+      0,                             // slot
+      1,                             // number of buffers
+      &gpID3D11BufferConstantBuffer  // constant buffer
+  );
+
+  //////////////////////////////////////////////////////////////////////////////
+
   // set clear color
   gClearColor[0] = 0.0f;
   gClearColor[1] = 0.0f;
   gClearColor[2] = 1.0f;
   gClearColor[3] = 0.0f;
+
+  // set projection matrix
+  gOrthographicProjectionMatrix = XMMatrixIdentity();
 
   // warm-up resize call
   hr = resize(WIN_WIDTH, WIN_HEIGHT);
@@ -569,6 +682,10 @@ HRESULT initialize(void) {
 HRESULT resize(int width, int height) {
   // code
   HRESULT hr = S_OK;
+
+  if (height < 0) {
+    height = 1;
+  }
 
   // free all size dependent resources
   if (gpID3D11RenderTargetView) {
@@ -613,6 +730,17 @@ HRESULT resize(int width, int height) {
 
   gpID3D11DeviceContext->RSSetViewports(1, &d3d11Viewport);
 
+  if (width <= height) {
+    gOrthographicProjectionMatrix = XMMatrixOrthographicOffCenterLH(
+        -100.0f, 100.0f, -100.0f * ((float)height / (float)width),
+        100.0f * ((float)height / (float)width), -100.0f, 100.0f);
+  } else {
+    gOrthographicProjectionMatrix = XMMatrixOrthographicOffCenterLH(
+        -100.0f * ((float)width / (float)height),
+        100.0f * ((float)width / (float)height), -100.0f, 100.0f, -100.0f,
+        100.0f);
+  }
+
   return (hr);
 }
 
@@ -622,6 +750,41 @@ void display(void) {
   // clear render target view
   gpID3D11DeviceContext->ClearRenderTargetView(gpID3D11RenderTargetView,
                                                gClearColor);
+
+  // set vertex buffer into pipeline
+  UINT stride = sizeof(float) * 3;
+  UINT offset = 0;
+  gpID3D11DeviceContext->IASetVertexBuffers(
+      0,                            // input slot index
+      1,                            // number of buffers
+      &gpID3D11BufferVertexBuffer,  // vertex buffer
+      &stride, &offset);
+
+  // set primitive topology
+  gpID3D11DeviceContext->IASetPrimitiveTopology(
+      D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);  // ~ GL_TRIANGLES
+
+  // transformation matrices
+  XMMATRIX worldMatrix = XMMatrixIdentity();
+  XMMATRIX viewMatrix = XMMatrixIdentity();
+
+  XMMATRIX wvpMatrix = worldMatrix * viewMatrix * gOrthographicProjectionMatrix;
+
+  // push constant buffer
+  CBUFFER constantBuffer;
+  constantBuffer.WorldViewProjectionMatrix = wvpMatrix;
+
+  // ~ glUniform(...)
+  gpID3D11DeviceContext->UpdateSubresource(
+      gpID3D11BufferConstantBuffer,  // constant buffer
+      0,                             // index
+      NULL,                          // box
+      &constantBuffer,               // source data
+      0, 0                           // row pitch and depth pitch of box
+  );
+
+  // draw primitive
+  gpID3D11DeviceContext->Draw(3, 0);
 
   // Swap Buffers!
   gpIDXGISwapChain->Present(1, 0);
@@ -633,6 +796,31 @@ void update(void) {
 
 void uninitialize(void) {
   // code
+  if (gpID3D11BufferConstantBuffer) {
+    gpID3D11BufferConstantBuffer->Release();
+    gpID3D11BufferConstantBuffer = NULL;
+  }
+
+  if (gpID3D11InputLayout) {
+    gpID3D11InputLayout->Release();
+    gpID3D11InputLayout = NULL;
+  }
+
+  if (gpID3D11BufferVertexBuffer) {
+    gpID3D11BufferVertexBuffer->Release();
+    gpID3D11BufferVertexBuffer = NULL;
+  }
+
+  if (gpID3D11PixelShader) {
+    gpID3D11PixelShader->Release();
+    gpID3D11PixelShader = NULL;
+  }
+
+  if (gpID3D11VertexShader) {
+    gpID3D11VertexShader->Release();
+    gpID3D11VertexShader = NULL;
+  }
+
   if (gpID3D11RenderTargetView) {
     gpID3D11RenderTargetView->Release();
     gpID3D11RenderTargetView = NULL;
