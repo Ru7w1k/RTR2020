@@ -15,7 +15,7 @@
 **/RMCLog.txt
 03-Android/00-Windowing/_Template/*
 **/.vscode
-*.app*
+05-macOS/**/*.app*
 *.log*
 07-Direct3D11/**/*.exe
 07-Direct3D11/**/*.obj
