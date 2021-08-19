@@ -8,8 +8,11 @@
 #include "vmath.h"
 #include "OGLTemplate.h"
 
+#include <SOIL/SOIL.h>
+
 #pragma comment(lib, "glew32.lib")
 #pragma comment(lib, "opengl32.lib")
+#pragma comment(lib, "soil.lib")
 
 // macros
 #define WIN_WIDTH  800
@@ -261,6 +264,7 @@ void initialize(void)
 	void resize(int, int);
 	void uninitialize(void);
 	bool loadGLTexture(GLuint *, TCHAR[]);
+	GLuint loadBitmapAsTexture(const char *path);
 
 	// variable declarations
 	PIXELFORMATDESCRIPTOR pfd;
@@ -653,8 +657,11 @@ void initialize(void)
 
 	// load textures
 	glEnable(GL_TEXTURE_2D);
-	loadGLTexture(&stoneTexture, MAKEINTRESOURCE(STONE_BITMAP));
-	loadGLTexture(&kundaliTexture, MAKEINTRESOURCE(KUNDALI_BITMAP));
+	// loadGLTexture(&stoneTexture, MAKEINTRESOURCE(STONE_BITMAP));
+	// loadGLTexture(&kundaliTexture, MAKEINTRESOURCE(KUNDALI_BITMAP));
+
+	stoneTexture = loadBitmapAsTexture("stone.bmp");
+	kundaliTexture = loadBitmapAsTexture("Vijay_kundali.bmp");
 
 	perspectiveProjectionMatrix = mat4::identity();
 
@@ -941,6 +948,33 @@ bool loadGLTexture(GLuint *texture, TCHAR resourceID[])
 	}
 
 	return bResult;
+}
+
+// texture helper function
+GLuint loadBitmapAsTexture(const char *path)
+{
+	int width, height;
+	unsigned char *imageData = NULL;
+	GLuint textureID = 0;
+
+	imageData = SOIL_load_image(path, &width, &height, NULL, SOIL_LOAD_RGB);
+
+	// opengl code
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+	
+	glGenTextures(1, &textureID);
+	glBindTexture(GL_TEXTURE_2D, textureID);
+
+	// setting texture parameters
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+
+	// push data into graphics memory with the help of driver
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, imageData);
+	glGenerateMipmap(GL_TEXTURE_2D);
+
+	SOIL_free_image_data(imageData);
+	return(textureID);
 }
 
 
