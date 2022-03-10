@@ -16,10 +16,10 @@ using namespace vmath;
 
 enum
 {
-    AMC_ATTRIBUTE_POSITION = 0,
-    AMC_ATTRIBUTE_COLOR,
-    AMC_ATTRIBUTE_NORMAL,
-    AMC_ATTRIBUTE_TEXCOORD0,
+    RMC_ATTRIBUTE_POSITION = 0,
+    RMC_ATTRIBUTE_COLOR,
+    RMC_ATTRIBUTE_NORMAL,
+    RMC_ATTRIBUTE_TEXCOORD,
 
 };
 
@@ -322,8 +322,8 @@ int main(int args, const char *argv[])
     glAttachShader(gShaderProgramObject, fragmentShaderObject);
 
     // pre-linking binding to vertex attribute
-    glBindAttribLocation(gShaderProgramObject, AMC_ATTRIBUTE_POSITION, "vPosition");
-    glBindAttribLocation(gShaderProgramObject, AMC_ATTRIBUTE_TEXCOORD0, "vTexcoord");
+    glBindAttribLocation(gShaderProgramObject, RMC_ATTRIBUTE_POSITION, "vPosition");
+    glBindAttribLocation(gShaderProgramObject, RMC_ATTRIBUTE_TEXCOORD, "vTexcoord");
 
     // link the shader program
     glLinkProgram(gShaderProgramObject);
@@ -388,14 +388,14 @@ int main(int args, const char *argv[])
     glGenBuffers(1, &vbo_position);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_position);
     glBufferData(GL_ARRAY_BUFFER, 4 * 12 * sizeof(GLfloat), NULL, GL_DYNAMIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
+    glVertexAttribPointer(RMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(RMC_ATTRIBUTE_POSITION);
 
     glGenBuffers(1, &vbo_texture);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_texture);
     glBufferData(GL_ARRAY_BUFFER, sizeof(quadsTexcoords), quadsTexcoords, GL_STATIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_TEXCOORD0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_TEXCOORD0);
+    glVertexAttribPointer(RMC_ATTRIBUTE_TEXCOORD, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(RMC_ATTRIBUTE_TEXCOORD);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);

@@ -8,7 +8,6 @@
 #import <OpenGL/gl3ext.h>
 
 #import "vmath.h"
-#import "stack.h"
 
 using namespace vmath;
 
@@ -89,7 +88,7 @@ int main(int args, const char *argv[])
                                          styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable
                                            backing:NSBackingStoreBuffered
                                              defer:NO];
-    [window setTitle:@"OpenGL | Robotic Arm"];
+    [window setTitle:@"OpenGL | Interleaved"];
     [window center];
     
     glView = [[GLView alloc]initWithFrame:win_rect];
@@ -135,18 +134,45 @@ int main(int args, const char *argv[])
     CVDisplayLinkRef displayLink; // these are by default private fields
     
     GLuint gShaderProgramObject;
+    
+    GLuint vao;
+    GLuint vbo;
+    
+    GLuint texture_marble;
+
+    GLuint samplerUniform;
+
+    GLuint mUniform;
+    GLuint vUniform;
+    GLuint pUniform;
+
+    GLuint laUniform;
+    GLuint ldUniform;
+    GLuint lsUniform;
+    GLuint lightPositionUniform;
+
+    GLuint kaUniform;
+    GLuint kdUniform;
+    GLuint ksUniform;
+    GLuint shininessUniform;
+
+    BOOL bLight;
+    GLuint enableLightUniform;
+
     mat4   perspectiveProjectionMatrix;
-    
-    GLuint mvpUniform;
-    
-    int shoulder;
-    int elbow;
-    
-    GLuint vao_sphere;                    // vertex array object
-    GLuint vbo_position_sphere;        // vertex buffer object
-    GLuint vbo_normal_sphere;            // vertex buffer object
-    
-    int coords;
+
+    GLfloat angleCube;
+
+    // light settings
+    GLfloat lightAmbient[4];
+    GLfloat lightDiffuse[4];
+    GLfloat lightSpecular[4];
+    GLfloat lightPosition[4];
+
+    GLfloat materialAmbient[4];
+    GLfloat materialDiffuse[4];
+    GLfloat materialSpecular[4];
+    GLfloat materialShininess;
 }
 
 - (id)initWithFrame:(NSRect)frame;
@@ -185,7 +211,46 @@ int main(int args, const char *argv[])
         
         [self setPixelFormat:pixelFormat];
         [self setOpenGLContext:glContext]; // it automatically releases older context, if present, and sets the newer one
+        
+        angleCube = 0.0f;
 
+        // light settings
+        lightAmbient[0] = 0.5f;
+        lightAmbient[1] = 0.5f;
+        lightAmbient[2] = 0.5f;
+        lightAmbient[3] = 1.0f;
+        
+        lightDiffuse[0] = 1.0f;
+        lightDiffuse[1] = 1.0f;
+        lightDiffuse[2] = 1.0f;
+        lightDiffuse[3] = 1.0f;
+        
+        lightSpecular[0] = 1.0f;
+        lightSpecular[1] = 1.0f;
+        lightSpecular[2] = 1.0f;
+        lightSpecular[3] = 1.0f;
+        
+        lightPosition[0] = 100.0f;
+        lightPosition[1] = 100.0f;
+        lightPosition[2] = 100.0f;
+        lightPosition[3] = 1.0f;
+
+        materialAmbient[0] = 0.5f;
+        materialAmbient[1] = 0.5f;
+        materialAmbient[2] = 0.5f;
+        materialAmbient[3] = 1.0f;
+        
+        materialDiffuse[0] = 1.0f;
+        materialDiffuse[1] = 1.0f;
+        materialDiffuse[2] = 1.0f;
+        materialDiffuse[3] = 1.0f;
+        
+        materialSpecular[0] = 1.0f;
+        materialSpecular[1] = 1.0f;
+        materialSpecular[2] = 1.0f;
+        materialSpecular[3] = 1.0f;
+        
+        materialShininess = 128.0f;
     }
     
     return(self);
@@ -230,12 +295,31 @@ int main(int args, const char *argv[])
     "\n" \
     "in vec4 vPosition;" \
     "in vec4 vColor;" \
-    "uniform mat4 u_mvp_matrix;" \
-    "out vec4 outColor;" \
-    "void main(void)" \
+    "in vec3 vNormal;" \
+    "in vec2 vTexcoord;" \
+    "uniform mat4 u_m_matrix;" \
+    "uniform mat4 u_v_matrix;" \
+    "uniform mat4 u_p_matrix;" \
+    "uniform vec4 u_light_position;" \
+    "uniform int u_enable_light;" \
+    "out vec3 tnorm;" \
+    "out vec3 light_direction;" \
+    "out vec3 viewer_vector;" \
+    "out vec2 out_Texcoord;" \
+    "out vec4 out_Color;" \
+    "void main (void)" \
     "{" \
-    "   gl_Position = u_mvp_matrix * vPosition;" \
-    "   outColor = vColor;" \
+    "   if (u_enable_light == 1) " \
+    "   { " \
+    "       vec4 eye_coordinates = u_v_matrix * u_m_matrix * vPosition;" \
+    "       tnorm = mat3(u_v_matrix * u_m_matrix) * vNormal;" \
+    "       light_direction = vec3(u_light_position - eye_coordinates);" \
+    "       float tn_dot_ldir = max(dot(tnorm, light_direction), 0.0);" \
+    "       viewer_vector = vec3(-eye_coordinates.xyz);" \
+    "    }" \
+    "   gl_Position = u_p_matrix * u_v_matrix * u_m_matrix * vPosition;" \
+    "    out_Texcoord = vTexcoord;" \
+    "    out_Color = vColor;" \
     "}";
 
     // attach source code to vertex shader
@@ -276,11 +360,38 @@ int main(int args, const char *argv[])
     const GLchar *fragmentShaderSourceCode = (GLchar *)
     "#version 410 core" \
     "\n" \
-    "in vec4 outColor;" \
+    "in vec2 out_Texcoord;" \
+    "in vec4 out_Color;" \
+    "in vec3 tnorm;" \
+    "in vec3 light_direction;" \
+    "in vec3 viewer_vector;" \
+    "uniform vec3 u_la;" \
+    "uniform vec3 u_ld;" \
+    "uniform vec3 u_ls;" \
+    "uniform vec3 u_ka;" \
+    "uniform vec3 u_kd;" \
+    "uniform vec3 u_ks;" \
+    "uniform float u_shininess;" \
+    "uniform int u_enable_light;" \
+    "uniform sampler2D u_sampler;" \
     "out vec4 FragColor;" \
-    "void main(void)" \
+    "void main (void)" \
     "{" \
-    "   FragColor = outColor;" \
+    "    vec3 phong_ads_light = vec3(1.0);" \
+    "   if (u_enable_light == 1) " \
+    "   { " \
+    "       vec3 ntnorm = normalize(tnorm);" \
+    "       vec3 nlight_direction = normalize(light_direction);" \
+    "       vec3 nviewer_vector = normalize(viewer_vector);" \
+    "       vec3 reflection_vector = reflect(-nlight_direction, ntnorm);" \
+    "       float tn_dot_ldir = max(dot(ntnorm, nlight_direction), 0.0);" \
+    "       vec3 ambient  = u_la * u_ka;" \
+    "       vec3 diffuse  = u_ld * u_kd * tn_dot_ldir;" \
+    "       vec3 specular = u_ls * u_ks * pow(max(dot(reflection_vector, nviewer_vector), 0.0), u_shininess);" \
+    "       phong_ads_light = ambient + diffuse + specular;" \
+    "    }" \
+    "    vec4 tex = texture(u_sampler, out_Texcoord);" \
+    "    FragColor = vec4((vec3(tex) * vec3(out_Color) * phong_ads_light), 1.0);" \
     "}";
     
     // attach source code to fragment shader
@@ -326,6 +437,8 @@ int main(int args, const char *argv[])
     // pre-linking binding to vertex attribute
     glBindAttribLocation(gShaderProgramObject, RMC_ATTRIBUTE_POSITION, "vPosition");
     glBindAttribLocation(gShaderProgramObject, RMC_ATTRIBUTE_COLOR, "vColor");
+    glBindAttribLocation(gShaderProgramObject, RMC_ATTRIBUTE_NORMAL, "vNormal");
+    glBindAttribLocation(gShaderProgramObject, RMC_ATTRIBUTE_TEXCOORD, "vTexcoord");
     
     // link the shader program
     glLinkProgram(gShaderProgramObject);
@@ -356,29 +469,85 @@ int main(int args, const char *argv[])
     }
     
     // post-linking retrieving uniform locations
-    mvpUniform = glGetUniformLocation(gShaderProgramObject, "u_mvp_matrix");
-    
-    /////////////////////////////////////////////////////////////////////////////
+    mUniform = glGetUniformLocation(gShaderProgramObject, "u_m_matrix");
+    vUniform = glGetUniformLocation(gShaderProgramObject, "u_v_matrix");
+    pUniform = glGetUniformLocation(gShaderProgramObject, "u_p_matrix");
+
+    samplerUniform = glGetUniformLocation(gShaderProgramObject, "u_sampler");
+
+    laUniform = glGetUniformLocation(gShaderProgramObject, "u_la");
+    kaUniform = glGetUniformLocation(gShaderProgramObject, "u_ka");
+    ldUniform = glGetUniformLocation(gShaderProgramObject, "u_ld");
+    kdUniform = glGetUniformLocation(gShaderProgramObject, "u_kd");
+    lsUniform = glGetUniformLocation(gShaderProgramObject, "u_ls");
+    ksUniform = glGetUniformLocation(gShaderProgramObject, "u_ks");
+    shininessUniform = glGetUniformLocation(gShaderProgramObject, "u_shininess");
+
+    enableLightUniform = glGetUniformLocation(gShaderProgramObject, "u_enable_light");
+    lightPositionUniform = glGetUniformLocation(gShaderProgramObject, "u_light_position");
 
     // vertex array
-    GLfloat *sphereVertices = NULL;
-    GLfloat *sphereNormals = NULL;
-    GLfloat *sphereTexcoords = NULL;
-    coords = [self generateSphereCoords:0.5f  slices:100  pos:&sphereVertices norm:&sphereNormals tex:&sphereTexcoords];
-    
+    const GLfloat cubeData[] = {
+        /* Top */
+         1.0f,  1.0f, -1.0f,    1.0f, 0.0f, 0.0f,    0.0f, 1.0f, 0.0f,    0.0f, 1.0f,
+        -1.0f,  1.0f, -1.0f,    1.0f, 0.0f, 0.0f,    0.0f, 1.0f, 0.0f,    0.0f, 0.0f,
+        -1.0f,  1.0f,  1.0f,    1.0f, 0.0f, 0.0f,    0.0f, 1.0f, 0.0f,    1.0f, 0.0f,
+         1.0f,  1.0f,  1.0f,    1.0f, 0.0f, 0.0f,    0.0f, 1.0f, 0.0f,    1.0f, 1.0f,
+
+        /* Bottom */
+         1.0f, -1.0f,  1.0f,    0.0f, 1.0f, 0.0f,    0.0f, -1.0f, 0.0f,    1.0f, 1.0f,
+        -1.0f, -1.0f,  1.0f,    0.0f, 1.0f, 0.0f,    0.0f, -1.0f, 0.0f,    0.0f, 1.0f,
+        -1.0f, -1.0f, -1.0f,    0.0f, 1.0f, 0.0f,    0.0f, -1.0f, 0.0f,    0.0f, 0.0f,
+         1.0f, -1.0f, -1.0f,    0.0f, 1.0f, 0.0f,    0.0f, -1.0f, 0.0f,    1.0f, 0.0f,
+
+        /* Front */
+         1.0f,  1.0f,  1.0f,    0.0f, 0.0f, 1.0f,    0.0f, 0.0f, 1.0f,    1.0f, 1.0f,
+        -1.0f,  1.0f,  1.0f,    0.0f, 0.0f, 1.0f,    0.0f, 0.0f, 1.0f,    0.0f, 1.0f,
+        -1.0f, -1.0f,  1.0f,    0.0f, 0.0f, 1.0f,    0.0f, 0.0f, 1.0f,    0.0f, 0.0f,
+         1.0f, -1.0f,  1.0f,    0.0f, 0.0f, 1.0f,    0.0f, 0.0f, 1.0f,    1.0f, 0.0f,
+
+        /* Back */
+         1.0f, -1.0f, -1.0f,    0.0f, 1.0f, 1.0f,    0.0f, 0.0f, -1.0f,    1.0f, 0.0f,
+        -1.0f, -1.0f, -1.0f,    0.0f, 1.0f, 1.0f,    0.0f, 0.0f, -1.0f,    1.0f, 1.0f,
+        -1.0f,  1.0f, -1.0f,    0.0f, 1.0f, 1.0f,    0.0f, 0.0f, -1.0f,    0.0f, 1.0f,
+         1.0f,  1.0f, -1.0f,    0.0f, 1.0f, 1.0f,    0.0f, 0.0f, -1.0f,    0.0f, 0.0f,
+
+        /* Right */
+        1.0f,  1.0f, -1.0f,        1.0f, 0.0f, 1.0f,    1.0f, 0.0f, 0.0f,    1.0f, 0.0f,
+        1.0f,  1.0f,  1.0f,        1.0f, 0.0f, 1.0f,    1.0f, 0.0f, 0.0f,    1.0f, 1.0f,
+        1.0f, -1.0f,  1.0f,        1.0f, 0.0f, 1.0f,    1.0f, 0.0f, 0.0f,    0.0f, 1.0f,
+        1.0f, -1.0f, -1.0f,        1.0f, 0.0f, 1.0f,    1.0f, 0.0f, 0.0f,    0.0f, 0.0f,
+
+        /* Left */
+        -1.0f,  1.0f,  1.0f,    1.0f, 1.0f, 0.0f,    -1.0f, 0.0f, 0.0f,    0.0f, 0.0f,
+        -1.0f,  1.0f, -1.0f,    1.0f, 1.0f, 0.0f,    -1.0f, 0.0f, 0.0f,    1.0f, 0.0f,
+        -1.0f, -1.0f, -1.0f,    1.0f, 1.0f, 0.0f,    -1.0f, 0.0f, 0.0f,    1.0f, 1.0f,
+        -1.0f, -1.0f,  1.0f,    1.0f, 1.0f, 0.0f,    -1.0f, 0.0f, 0.0f,    0.0f, 1.0f
+    };
+
     // create vao
-    glGenVertexArrays(1, &vao_sphere);
-    glBindVertexArray(vao_sphere);
-    
-    // vertex positions
-    glGenBuffers(1, &vbo_position_sphere);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_position_sphere);
-    glBufferData(GL_ARRAY_BUFFER, 3 * coords * sizeof(GLfloat), sphereVertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(RMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+
+    // vertex position
+    glGenBuffers(1, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeData), cubeData, GL_STATIC_DRAW);
+    glVertexAttribPointer(RMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void *)(0 * sizeof(float)));
     glEnableVertexAttribArray(RMC_ATTRIBUTE_POSITION);
-    
-    glVertexAttrib3f(RMC_ATTRIBUTE_COLOR, 0.5f, 0.35f, 0.05f);
-    
+
+    // vertex colors
+    glVertexAttribPointer(RMC_ATTRIBUTE_COLOR, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void *)(3 * sizeof(float)));
+    glEnableVertexAttribArray(RMC_ATTRIBUTE_COLOR);
+
+    // vertex normals
+    glVertexAttribPointer(RMC_ATTRIBUTE_NORMAL, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void *)(6 * sizeof(float)));
+    glEnableVertexAttribArray(RMC_ATTRIBUTE_NORMAL);
+
+    // vertex texcoords
+    glVertexAttribPointer(RMC_ATTRIBUTE_TEXCOORD, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void *)(9 * sizeof(float)));
+    glEnableVertexAttribArray(RMC_ATTRIBUTE_TEXCOORD);
+
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
     
@@ -393,6 +562,10 @@ int main(int args, const char *argv[])
     // enable depth
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
+    
+    // texture
+    glEnable(GL_TEXTURE_2D);
+    texture_marble = [self loadTextureFromBMPFile:"marble.bmp"];
     
     //////////////////////////////////////////////////////////////////////
 
@@ -410,7 +583,7 @@ int main(int args, const char *argv[])
 {
     // code
     [super reshape];
-    
+
     CGLLockContext((CGLContextObj)[[self openGLContext]CGLContextObj]);
     
     NSRect rect = [self bounds];
@@ -441,95 +614,127 @@ int main(int args, const char *argv[])
     
     CGLLockContext((CGLContextObj)[[self openGLContext]CGLContextObj]);
     
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    
     // use shader program
     glUseProgram(gShaderProgramObject);
 
     //declaration of matrices
     mat4 translationMatrix;
-    mat4 rotationMatrix;
-    mat4 scaleMatrix;
-    mat4 modelViewMatrix;
+    mat4 modelMatrix;
+    mat4 ViewMatrix;
     mat4 modelViewProjectionMatrix;
 
     // intialize above matrices to identity
-    translationMatrix         = mat4::identity();
-    rotationMatrix            = mat4::identity();
-    scaleMatrix               = mat4::identity();
-    modelViewMatrix           = mat4::identity();
+    translationMatrix = mat4::identity();
+    modelMatrix = mat4::identity();
+    ViewMatrix = mat4::identity();
     modelViewProjectionMatrix = mat4::identity();
-    push(mat4::identity());
 
     // perform necessary transformations
-    translationMatrix = translate(0.0f, 0.0f, -12.0f);
-    modelViewMatrix = peek();
-    modelViewMatrix *= translationMatrix;
+    translationMatrix *= translate(0.0f, 0.0f, -6.0f);
 
     // do necessary matrix multiplication
-    //modelViewProjectionMatrix = perspectiveProjectionMatrix * modelViewMatrix;
-    push(modelViewMatrix);
-       
-    rotationMatrix = rotate(0.0f, 0.0f, (float)shoulder);
-    translationMatrix = translate(1.0f, 0.0f, 0.0f);
-    modelViewMatrix = peek();
-    modelViewMatrix *= rotationMatrix;
-    modelViewMatrix *= translationMatrix;
-    // modelViewProjectionMatrix = perspectiveProjectionMatrix * modelViewMatrix;
-    push(modelViewMatrix);
-
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    scaleMatrix = scale(2.0f, 0.5f, 1.0f);
-    modelViewMatrix = peek();
-    modelViewMatrix *= scaleMatrix;
-    push(modelViewMatrix);
+    modelMatrix *= translationMatrix;
+    modelMatrix *= rotate(angleCube, angleCube, angleCube);
 
     // send necessary matrices to shader in respective uniforms
-    modelViewProjectionMatrix = perspectiveProjectionMatrix * peek();
-    glUniformMatrix4fv(mvpUniform, 1, GL_FALSE, modelViewProjectionMatrix);
+    glUniformMatrix4fv(mUniform, 1, false, modelMatrix);
+    glUniformMatrix4fv(vUniform, 1, false, ViewMatrix);
+    glUniformMatrix4fv(pUniform, 1, false, perspectiveProjectionMatrix);
+
+    glUniform3fv(laUniform, 1, lightAmbient);
+    glUniform3fv(ldUniform, 1, lightDiffuse);
+    glUniform3fv(lsUniform, 1, lightSpecular);
+    glUniform4fv(lightPositionUniform, 1, lightPosition);
+
+    glUniform3fv(kaUniform, 1, materialAmbient);
+    glUniform3fv(kdUniform, 1, materialDiffuse);
+    glUniform3fv(ksUniform, 1, materialSpecular);
+    glUniform1f(shininessUniform, materialShininess);
+
+    if (bLight == YES)
+        glUniform1i(enableLightUniform, 1);
+    else
+        glUniform1i(enableLightUniform, 0);
+
+    // bind with textures
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture_marble);
+    glUniform1i(samplerUniform, 0);
 
     // bind with vao (this will avoid many binding to vbo)
-    glBindVertexArray(vao_sphere);
+    glBindVertexArray(vao);
 
     // draw necessary scene
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 3 * coords);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+    glDrawArrays(GL_TRIANGLE_FAN, 4, 4);
+    glDrawArrays(GL_TRIANGLE_FAN, 8, 4);
+    glDrawArrays(GL_TRIANGLE_FAN, 12, 4);
+    glDrawArrays(GL_TRIANGLE_FAN, 16, 4);
+    glDrawArrays(GL_TRIANGLE_FAN, 20, 4);
 
     // unbind vao
     glBindVertexArray(0);
-
-    pop();
-    
-    modelViewMatrix = peek();
-    modelViewMatrix *= translate(1.0f, 0.0f, 0.0f);
-    modelViewMatrix *= rotate(0.0f, 0.0f, (float)elbow);
-    modelViewMatrix *= translate(1.0f, 0.0f, 0.0f);
-    push(modelViewMatrix);
-
-    modelViewMatrix = peek();
-    modelViewMatrix *= scale(2.0f, 0.5f, 1.0f);
-    push(modelViewMatrix);
-
-    // send necessary matrices to shader in respective uniforms
-    modelViewProjectionMatrix = perspectiveProjectionMatrix * peek();
-    glUniformMatrix4fv(mvpUniform, 1, GL_FALSE, modelViewProjectionMatrix);
-
-    // bind with vao (this will avoid many binding to vbo)
-    glBindVertexArray(vao_sphere);
-
-    // draw necessary scene
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 3 * coords);
-
-    // unbind vao
-    glBindVertexArray(0);
-
-    resetStack();
 
     // unuse program
     glUseProgram(0);
     
+    [self step];
+    
     CGLFlushDrawable((CGLContextObj)[[self openGLContext]CGLContextObj]);
     
     CGLUnlockContext((CGLContextObj)[[self openGLContext]CGLContextObj]);
+}
+
+- (void)step
+{
+    if (angleCube >= 360.0)
+    {
+        angleCube = 0.0;
+    }
+    else
+    {
+        angleCube += 1.0f;
+    }
+}
+
+- (GLuint)loadTextureFromBMPFile:(const char *)texFileName
+{
+    NSBundle *mainBundle = [NSBundle mainBundle];
+    NSString *appDirName = [mainBundle bundlePath];
+    NSString *parentDirPath = [appDirName stringByDeletingLastPathComponent];
+    NSString *textureFileNameWithPath = [NSString stringWithFormat:@"%@/%s", parentDirPath, texFileName];
+
+    NSImage *bmpImage = [[NSImage alloc]initWithContentsOfFile:textureFileNameWithPath];
+    if (!bmpImage)
+    {
+        NSLog(@"can't find %@", textureFileNameWithPath);
+        return(0);
+    }
+
+    CGImageRef cgImage = [bmpImage CGImageForProposedRect:nil context:nil hints:nil];
+
+    int w = (int)CGImageGetWidth(cgImage);
+    int h = (int)CGImageGetHeight(cgImage);
+    CFDataRef imageData = CGDataProviderCopyData(CGImageGetDataProvider(cgImage));
+    void *pixels = (void *)CFDataGetBytePtr(imageData);
+
+    GLuint bmpTexture;
+    glGenTextures(1, &bmpTexture);
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // set 1 rather that default 4, for better performance
+    glBindTexture(GL_TEXTURE_2D, bmpTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+    // create mipmaps for this texture for better image quality
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    CFRelease(imageData);
+    return(bmpTexture);
 }
 
 - (BOOL)acceptsFirstResponder
@@ -550,25 +755,14 @@ int main(int args, const char *argv[])
             [NSApp terminate:self];
             break;
             
-        case 'S':
-            shoulder = (shoulder + 3) % 360;
-            break;
-
-        case 's':
-            shoulder = (shoulder - 3) % 360;
-            break;
-
-        case 'E':
-            elbow = (elbow + 3) % 360;
-            break;
-
-        case 'e':
-            elbow = (elbow - 3) % 360;
-            break;
-            
         case 'F':
         case 'f':
             [[self window]toggleFullScreen:self]; // repainting occurs automatically
+            break;
+            
+        case 'L':
+        case 'l':
+            bLight = !bLight;
             break;
             
         default:
@@ -593,115 +787,18 @@ int main(int args, const char *argv[])
     [self setNeedsDisplay:YES]; // repainting
 }
 
-- (int)generateSphereCoords:(GLfloat)r slices:(int)n pos:(GLfloat **)ppos norm:(GLfloat **)pnorm tex:(GLfloat **)ptex
-{
-    int iNoOfCoords = 0;
-    int i, j;
-    GLdouble phi1, phi2, theta, s, t;
-    GLfloat ex, ey, ez, px, py, pz;
-    
-    *ppos  = (GLfloat *)malloc(3 * sizeof(GLfloat) * n * (n + 1) * 2);
-    *pnorm = (GLfloat *)malloc(3 * sizeof(GLfloat) * n * (n + 1) * 2);
-    *ptex  = (GLfloat *)malloc(2 * sizeof(GLfloat) * n * (n + 1) * 2);
-    
-    GLfloat *pos  = *ppos;
-    GLfloat *norm = *pnorm;
-    GLfloat *tex  = *ptex;
-    
-    if (ppos && pnorm && ptex)
-    {
-        //iNoOfCoords = n * (n + 1);
-        
-        for (j = 0; j < n; j++) {
-            phi1 = j * M_PI * 2 / n;
-            phi2 = (j + 1) * M_PI * 2 / n;
-            
-            //fprintf(gpFile, "phi1 [%g]...\n", phi1);
-            //fprintf(gpFile, "phi2 [%g]...\n", phi2);
-            
-            for (i = 0; i <= n; i++) {
-                theta = i * M_PI / n;
-                
-                ex = sin(theta) * cos(phi2);
-                ey = sin(theta) * sin(phi2);
-                ez = cos(theta);
-                px = r * ex;
-                py = r * ey;
-                pz = r * ez;
-                
-                //glNormal3f(ex, ey, ez);
-                norm[(iNoOfCoords*3) + 0] = ex;
-                norm[(iNoOfCoords*3) + 1] = ey;
-                norm[(iNoOfCoords*3) + 2] = ez;
-                
-                s = phi2 / (M_PI * 2);   // column
-                t = 1 - (theta / M_PI);  // row
-                //glTexCoord2f(s, t);
-                tex[(iNoOfCoords*2) + 0] = s;
-                tex[(iNoOfCoords*2) + 1] = t;
-                
-                //glVertex3f(px, py, pz);
-                pos[(iNoOfCoords*3) + 0] = px;
-                pos[(iNoOfCoords*3) + 1] = py;
-                pos[(iNoOfCoords*3) + 2] = pz;
-                
-                /*fprintf(gpFile, "pos[%d]...\n", (iNoOfCoords * 3) + 0);
-                 fprintf(gpFile, "pos[%d]...\n", (iNoOfCoords * 3) + 1);
-                 fprintf(gpFile, "pos[%d]...\n", (iNoOfCoords * 3) + 2);*/
-                
-                ex = sin(theta) * cos(phi1);
-                ey = sin(theta) * sin(phi1);
-                ez = cos(theta);
-                px = r * ex;
-                py = r * ey;
-                pz = r * ez;
-                
-                //glNormal3f(ex, ey, ez);
-                norm[(iNoOfCoords*3) + 3] = ex;
-                norm[(iNoOfCoords*3) + 4] = ey;
-                norm[(iNoOfCoords*3) + 5] = ez;
-                
-                s = phi1 / (M_PI * 2);   // column
-                t = 1 - (theta / M_PI);  // row
-                //glTexCoord2f(s, t);
-                tex[(iNoOfCoords*2) + 2] = s;
-                tex[(iNoOfCoords*2) + 3] = t;
-                
-                //glVertex3f(px, py, pz);
-                pos[(iNoOfCoords*3) + 3] = px;
-                pos[(iNoOfCoords*3) + 4] = py;
-                pos[(iNoOfCoords*3) + 5] = pz;
-                
-                /*fprintf(gpFile, "pos[%d]...\n", (iNoOfCoords * 3) + 3);
-                 fprintf(gpFile, "pos[%d]...\n", (iNoOfCoords * 3) + 4);
-                 fprintf(gpFile, "pos[%d]...\n", (iNoOfCoords * 3) + 5);*/
-                
-                iNoOfCoords += 2;
-            }
-        }
-    }
-    
-    return iNoOfCoords;
-}
-
 - (void) dealloc
 {
-    if (vbo_position_sphere)
+    if (vbo)
     {
-        glDeleteBuffers(1, &vbo_position_sphere);
-        vbo_position_sphere = 0;
+        glDeleteBuffers(1, &vbo);
+        vbo = 0;
     }
-    
-    if (vbo_normal_sphere)
+
+    if (vao)
     {
-        glDeleteBuffers(1, &vbo_normal_sphere);
-        vbo_normal_sphere = 0;
-    }
-    
-    if (vao_sphere)
-    {
-        glDeleteVertexArrays(1, &vao_sphere);
-        vao_sphere = 0;
+        glDeleteVertexArrays(1, &vao);
+        vao = 0;
     }
     
     if (gShaderProgramObject)

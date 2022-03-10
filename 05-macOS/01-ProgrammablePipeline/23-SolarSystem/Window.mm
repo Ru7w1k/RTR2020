@@ -14,10 +14,10 @@ using namespace vmath;
 
 enum
 {
-    AMC_ATTRIBUTE_POSITION = 0,
-    AMC_ATTRIBUTE_COLOR,
-    AMC_ATTRIBUTE_NORMAL,
-    AMC_ATTRIBUTE_TEXCOORD0,
+    RMC_ATTRIBUTE_POSITION = 0,
+    RMC_ATTRIBUTE_COLOR,
+    RMC_ATTRIBUTE_NORMAL,
+    RMC_ATTRIBUTE_TEXCOORD,
     
 };
 
@@ -324,8 +324,8 @@ int main(int args, const char *argv[])
     glAttachShader(gShaderProgramObject, fragmentShaderObject);
     
     // pre-linking binding to vertex attribute
-    glBindAttribLocation(gShaderProgramObject, AMC_ATTRIBUTE_POSITION, "vPosition");
-    glBindAttribLocation(gShaderProgramObject, AMC_ATTRIBUTE_COLOR, "vColor");
+    glBindAttribLocation(gShaderProgramObject, RMC_ATTRIBUTE_POSITION, "vPosition");
+    glBindAttribLocation(gShaderProgramObject, RMC_ATTRIBUTE_COLOR, "vColor");
     
     // link the shader program
     glLinkProgram(gShaderProgramObject);
@@ -374,10 +374,10 @@ int main(int args, const char *argv[])
     glGenBuffers(1, &vbo_position_sphere);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_position_sphere);
     glBufferData(GL_ARRAY_BUFFER, 3 * coords * sizeof(GLfloat), sphereVertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
+    glVertexAttribPointer(RMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(RMC_ATTRIBUTE_POSITION);
     
-    glVertexAttrib3f(AMC_ATTRIBUTE_COLOR, 0.5f, 0.35f, 0.05f);
+    glVertexAttrib3f(RMC_ATTRIBUTE_COLOR, 0.5f, 0.35f, 0.05f);
     
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
@@ -476,7 +476,7 @@ int main(int args, const char *argv[])
     modelViewProjectionMatrix = perspectiveProjectionMatrix * peek();
     glUniformMatrix4fv(mvpUniform, 1, GL_FALSE, modelViewProjectionMatrix);
     glBindVertexArray(vao_sphere);
-    glVertexAttrib3f(AMC_ATTRIBUTE_COLOR, 1.0f, 1.0f, 0.0f);
+    glVertexAttrib3f(RMC_ATTRIBUTE_COLOR, 1.0f, 1.0f, 0.0f);
     glDrawArrays(GL_TRIANGLE_FAN, 0, 3 * coords);
     glBindVertexArray(0);
     pop();
@@ -494,7 +494,7 @@ int main(int args, const char *argv[])
     modelViewProjectionMatrix = perspectiveProjectionMatrix * peek();
     glUniformMatrix4fv(mvpUniform, 1, GL_FALSE, modelViewProjectionMatrix);
     glBindVertexArray(vao_sphere);
-    glVertexAttrib3f(AMC_ATTRIBUTE_COLOR, 0.4f, 0.9f, 1.0f);
+    glVertexAttrib3f(RMC_ATTRIBUTE_COLOR, 0.4f, 0.9f, 1.0f);
     glDrawArrays(GL_TRIANGLE_FAN, 0, 3 * coords);
     glBindVertexArray(0);
     pop();
@@ -513,7 +513,7 @@ int main(int args, const char *argv[])
     modelViewProjectionMatrix = perspectiveProjectionMatrix * peek();
     glUniformMatrix4fv(mvpUniform, 1, GL_FALSE, modelViewProjectionMatrix);
     glBindVertexArray(vao_sphere);
-    glVertexAttrib3f(AMC_ATTRIBUTE_COLOR, 0.9f, 0.9f, 0.9f);
+    glVertexAttrib3f(RMC_ATTRIBUTE_COLOR, 0.9f, 0.9f, 0.9f);
     glDrawArrays(GL_TRIANGLE_FAN, 0, 3 * coords);
     glBindVertexArray(0);
     pop();

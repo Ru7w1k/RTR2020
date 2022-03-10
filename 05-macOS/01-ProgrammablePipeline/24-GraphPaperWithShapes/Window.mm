@@ -13,10 +13,10 @@ using namespace vmath;
 
 enum
 {
-    AMC_ATTRIBUTE_POSITION = 0,
-    AMC_ATTRIBUTE_COLOR,
-    AMC_ATTRIBUTE_NORMAL,
-    AMC_ATTRIBUTE_TEXTURE0,
+    RMC_ATTRIBUTE_POSITION = 0,
+    RMC_ATTRIBUTE_COLOR,
+    RMC_ATTRIBUTE_NORMAL,
+    RMC_ATTRIBUTE_TEXTURE0,
 
 };
 
@@ -325,8 +325,8 @@ int main(int args, const char *argv[])
     glAttachShader(gShaderProgramObject, fragmentShaderObject);
 
     // pre-linking binding to vertex attribute
-    glBindAttribLocation(gShaderProgramObject, AMC_ATTRIBUTE_POSITION, "vPosition");
-    glBindAttribLocation(gShaderProgramObject, AMC_ATTRIBUTE_COLOR, "vColor");
+    glBindAttribLocation(gShaderProgramObject, RMC_ATTRIBUTE_POSITION, "vPosition");
+    glBindAttribLocation(gShaderProgramObject, RMC_ATTRIBUTE_COLOR, "vColor");
 
     // link the shader program
     glLinkProgram(gShaderProgramObject);
@@ -403,15 +403,15 @@ int main(int args, const char *argv[])
     glGenBuffers(1, &vbo_vertex);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_vertex);
     glBufferData(GL_ARRAY_BUFFER, coords * 3 * sizeof(GLfloat), graphCoords, GL_STATIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
+    glVertexAttribPointer(RMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(RMC_ATTRIBUTE_POSITION);
 
     // vbo color axes
     glGenBuffers(1, &vbo_color);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_color);
     glBufferData(GL_ARRAY_BUFFER, coords * 3 * sizeof(GLfloat), smallAxisColors, GL_STATIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_COLOR, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_COLOR);
+    glVertexAttribPointer(RMC_ATTRIBUTE_COLOR, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(RMC_ATTRIBUTE_COLOR);
 
     // vao for Major axis
     glGenVertexArrays(1, &vaoAxes);
@@ -421,15 +421,15 @@ int main(int args, const char *argv[])
     glGenBuffers(1, &vbo_vertexAxes);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_vertexAxes);
     glBufferData(GL_ARRAY_BUFFER, sizeof(axisCoords), axisCoords, GL_STATIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
+    glVertexAttribPointer(RMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(RMC_ATTRIBUTE_POSITION);
 
     // vbo color axes
     glGenBuffers(1, &vbo_colorAxes);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_colorAxes);
     glBufferData(GL_ARRAY_BUFFER, sizeof(axisColors), axisColors, GL_STATIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_COLOR, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_COLOR);
+    glVertexAttribPointer(RMC_ATTRIBUTE_COLOR, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(RMC_ATTRIBUTE_COLOR);
 
 
     // vao for shapes
@@ -441,10 +441,10 @@ int main(int args, const char *argv[])
     glBindBuffer(GL_ARRAY_BUFFER, vbo_vertexShapes);
 
     glBufferData(GL_ARRAY_BUFFER, sizeof(shapesCoords), shapesCoords, GL_STATIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, false, 0, 0);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
+    glVertexAttribPointer(RMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, false, 0, 0);
+    glEnableVertexAttribArray(RMC_ATTRIBUTE_POSITION);
 
-    glVertexAttrib3f(AMC_ATTRIBUTE_COLOR, 1.0f, 1.0f, 0.0f);
+    glVertexAttrib3f(RMC_ATTRIBUTE_COLOR, 1.0f, 1.0f, 0.0f);
        
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);

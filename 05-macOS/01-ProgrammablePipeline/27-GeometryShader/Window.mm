@@ -8,7 +8,6 @@
 #import <OpenGL/gl3ext.h>
 
 #import "vmath.h"
-#import "stack.h"
 
 using namespace vmath;
 
@@ -89,7 +88,7 @@ int main(int args, const char *argv[])
                                          styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable
                                            backing:NSBackingStoreBuffered
                                              defer:NO];
-    [window setTitle:@"OpenGL | Robotic Arm"];
+    [window setTitle:@"OpenGL | Geometry Shader"];
     [window center];
     
     glView = [[GLView alloc]initWithFrame:win_rect];
@@ -135,18 +134,12 @@ int main(int args, const char *argv[])
     CVDisplayLinkRef displayLink; // these are by default private fields
     
     GLuint gShaderProgramObject;
+    
+    GLuint vao;            // vertex array object
+    GLuint vbo;            // vertex buffer object
+    GLuint mvpUniform;    // vertex buffer object
+    
     mat4   perspectiveProjectionMatrix;
-    
-    GLuint mvpUniform;
-    
-    int shoulder;
-    int elbow;
-    
-    GLuint vao_sphere;                    // vertex array object
-    GLuint vbo_position_sphere;        // vertex buffer object
-    GLuint vbo_normal_sphere;            // vertex buffer object
-    
-    int coords;
 }
 
 - (id)initWithFrame:(NSRect)frame;
@@ -185,7 +178,6 @@ int main(int args, const char *argv[])
         
         [self setPixelFormat:pixelFormat];
         [self setOpenGLContext:glContext]; // it automatically releases older context, if present, and sets the newer one
-
     }
     
     return(self);
@@ -206,6 +198,7 @@ int main(int args, const char *argv[])
 {
     // code
     GLuint vertexShaderObject;
+    GLuint geometryShaderObject;
     GLuint fragmentShaderObject;
 
     [super prepareOpenGL];
@@ -228,14 +221,10 @@ int main(int args, const char *argv[])
     const GLchar *vertexShaderSourceCode = (GLchar *)
     "#version 410 core "  \
     "\n" \
-    "in vec4 vPosition;" \
-    "in vec4 vColor;" \
-    "uniform mat4 u_mvp_matrix;" \
-    "out vec4 outColor;" \
-    "void main(void)" \
+    "in vec3 vPosition;" \
+    "void main (void)" \
     "{" \
-    "   gl_Position = u_mvp_matrix * vPosition;" \
-    "   outColor = vColor;" \
+    "    gl_Position = vec4(vPosition, 1.0);" \
     "}";
 
     // attach source code to vertex shader
@@ -269,6 +258,61 @@ int main(int args, const char *argv[])
         }
     }
     
+    // create geometry shader object
+    geometryShaderObject = glCreateShader(GL_GEOMETRY_SHADER);
+
+    // tessellation control shader source code
+    const GLchar *geometryShaderSourceCode = (GLchar *)
+        "#version 410 core" \
+        "\n" \
+        "layout(triangles)in;" \
+        "layout(triangle_strip, max_vertices=9)out;" \
+        "uniform mat4 u_mvp_matrix;" \
+        "void main (void)" \
+        "{" \
+        "    for(int vertex = 0; vertex < 3; vertex++)" \
+        "    {" \
+        "        gl_Position = u_mvp_matrix * (gl_in[vertex].gl_Position + vec4(0.0, 0.5, 0.0, 1.0));" \
+        "        EmitVertex();" \
+        "        gl_Position = u_mvp_matrix * (gl_in[vertex].gl_Position + vec4(-0.5, -0.5, 0.0, 1.0));" \
+        "        EmitVertex();" \
+        "        gl_Position = u_mvp_matrix * (gl_in[vertex].gl_Position + vec4(0.5, -0.5, 0.0, 1.0));" \
+        "        EmitVertex();" \
+        "        EndPrimitive();" \
+        "    }" \
+        "}";
+
+    // attach source code to fragment shader
+    glShaderSource(geometryShaderObject, 1, (const GLchar **)&geometryShaderSourceCode, NULL);
+
+    // compile fragment shader source code
+    glCompileShader(geometryShaderObject);
+
+    // compile errors
+    iShaderCompileStatus = 0;
+    iInfoLogLength = 0;
+    szInfoLog = NULL;
+
+    glGetShaderiv(geometryShaderObject, GL_COMPILE_STATUS, &iShaderCompileStatus);
+    if (iShaderCompileStatus == GL_FALSE)
+    {
+        glGetShaderiv(geometryShaderObject, GL_INFO_LOG_LENGTH, &iInfoLogLength);
+        if (iInfoLogLength > 0)
+        {
+            szInfoLog = (GLchar *)malloc(iInfoLogLength);
+            if (szInfoLog != NULL)
+            {
+                GLsizei written;
+                glGetShaderInfoLog(geometryShaderObject, GL_INFO_LOG_LENGTH, &written, szInfoLog);
+
+                fprintf(gpFile, "Geometry Shader Compiler Info Log: %s", szInfoLog);
+                free(szInfoLog);
+                [self release];
+                [NSApp terminate:self];
+            }
+        }
+    }
+    
     // create fragment shader object
     fragmentShaderObject = glCreateShader(GL_FRAGMENT_SHADER);
     
@@ -276,11 +320,10 @@ int main(int args, const char *argv[])
     const GLchar *fragmentShaderSourceCode = (GLchar *)
     "#version 410 core" \
     "\n" \
-    "in vec4 outColor;" \
     "out vec4 FragColor;" \
-    "void main(void)" \
+    "void main (void)" \
     "{" \
-    "   FragColor = outColor;" \
+    "    FragColor = vec4(1.0, 1.0, 1.0, 1.0);" \
     "}";
     
     // attach source code to fragment shader
@@ -320,12 +363,14 @@ int main(int args, const char *argv[])
     // attach vertex shader to shader program
     glAttachShader(gShaderProgramObject, vertexShaderObject);
     
+    // attach geometry shader to shader program
+    glAttachShader(gShaderProgramObject, geometryShaderObject);
+    
     // attach fragment shader to shader program
     glAttachShader(gShaderProgramObject, fragmentShaderObject);
     
     // pre-linking binding to vertex attribute
     glBindAttribLocation(gShaderProgramObject, RMC_ATTRIBUTE_POSITION, "vPosition");
-    glBindAttribLocation(gShaderProgramObject, RMC_ATTRIBUTE_COLOR, "vColor");
     
     // link the shader program
     glLinkProgram(gShaderProgramObject);
@@ -357,29 +402,26 @@ int main(int args, const char *argv[])
     
     // post-linking retrieving uniform locations
     mvpUniform = glGetUniformLocation(gShaderProgramObject, "u_mvp_matrix");
-    
-    /////////////////////////////////////////////////////////////////////////////
 
     // vertex array
-    GLfloat *sphereVertices = NULL;
-    GLfloat *sphereNormals = NULL;
-    GLfloat *sphereTexcoords = NULL;
-    coords = [self generateSphereCoords:0.5f  slices:100  pos:&sphereVertices norm:&sphereNormals tex:&sphereTexcoords];
-    
+    const float vertices[] = {
+        0.0f, 1.0f, 0.0f,
+        -1.0f, -1.0f, 0.0f,
+        1.0f, -1.0f, 0.0f
+    };
+
     // create vao
-    glGenVertexArrays(1, &vao_sphere);
-    glBindVertexArray(vao_sphere);
-    
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+
     // vertex positions
-    glGenBuffers(1, &vbo_position_sphere);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_position_sphere);
-    glBufferData(GL_ARRAY_BUFFER, 3 * coords * sizeof(GLfloat), sphereVertices, GL_STATIC_DRAW);
+    glGenBuffers(1, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
     glVertexAttribPointer(RMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
     glEnableVertexAttribArray(RMC_ATTRIBUTE_POSITION);
-    
-    glVertexAttrib3f(RMC_ATTRIBUTE_COLOR, 0.5f, 0.35f, 0.05f);
-    
     glBindBuffer(GL_ARRAY_BUFFER, 0);
+
     glBindVertexArray(0);
     
     //////////////////////////////////////////////////////////////////////
@@ -396,8 +438,10 @@ int main(int args, const char *argv[])
     
     //////////////////////////////////////////////////////////////////////
 
+    glLineWidth(3.0f);
+
     perspectiveProjectionMatrix = mat4::identity();
-    
+
     CVDisplayLinkCreateWithActiveCGDisplays(&displayLink);
     CVDisplayLinkSetOutputCallback(displayLink, &MyDisplayLinkCallback, self);
     CGLContextObj cglContext = (CGLContextObj)[[self openGLContext]CGLContextObj];
@@ -410,7 +454,7 @@ int main(int args, const char *argv[])
 {
     // code
     [super reshape];
-    
+
     CGLLockContext((CGLContextObj)[[self openGLContext]CGLContextObj]);
     
     NSRect rect = [self bounds];
@@ -441,88 +485,39 @@ int main(int args, const char *argv[])
     
     CGLLockContext((CGLContextObj)[[self openGLContext]CGLContextObj]);
     
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    
     // use shader program
     glUseProgram(gShaderProgramObject);
 
     //declaration of matrices
-    mat4 translationMatrix;
-    mat4 rotationMatrix;
-    mat4 scaleMatrix;
     mat4 modelViewMatrix;
     mat4 modelViewProjectionMatrix;
 
+    ///// RECTANGLE   ////////////////////////////////////////////////////////////////////////
+
     // intialize above matrices to identity
-    translationMatrix         = mat4::identity();
-    rotationMatrix            = mat4::identity();
-    scaleMatrix               = mat4::identity();
-    modelViewMatrix           = mat4::identity();
+    modelViewMatrix = mat4::identity();
     modelViewProjectionMatrix = mat4::identity();
-    push(mat4::identity());
 
     // perform necessary transformations
-    translationMatrix = translate(0.0f, 0.0f, -12.0f);
-    modelViewMatrix = peek();
-    modelViewMatrix *= translationMatrix;
+    modelViewMatrix = translate(0.0f, 0.0f, -6.0f);
 
     // do necessary matrix multiplication
-    //modelViewProjectionMatrix = perspectiveProjectionMatrix * modelViewMatrix;
-    push(modelViewMatrix);
-       
-    rotationMatrix = rotate(0.0f, 0.0f, (float)shoulder);
-    translationMatrix = translate(1.0f, 0.0f, 0.0f);
-    modelViewMatrix = peek();
-    modelViewMatrix *= rotationMatrix;
-    modelViewMatrix *= translationMatrix;
-    // modelViewProjectionMatrix = perspectiveProjectionMatrix * modelViewMatrix;
-    push(modelViewMatrix);
-
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    scaleMatrix = scale(2.0f, 0.5f, 1.0f);
-    modelViewMatrix = peek();
-    modelViewMatrix *= scaleMatrix;
-    push(modelViewMatrix);
+    modelViewProjectionMatrix = perspectiveProjectionMatrix * modelViewMatrix;
 
     // send necessary matrices to shader in respective uniforms
-    modelViewProjectionMatrix = perspectiveProjectionMatrix * peek();
     glUniformMatrix4fv(mvpUniform, 1, GL_FALSE, modelViewProjectionMatrix);
 
-    // bind with vao (this will avoid many binding to vbo)
-    glBindVertexArray(vao_sphere);
+    // bind with vao (this will avoid many binding to vbo_vertex)
+    glBindVertexArray(vao);
 
-    // draw necessary scene
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 3 * coords);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
 
     // unbind vao
     glBindVertexArray(0);
 
-    pop();
-    
-    modelViewMatrix = peek();
-    modelViewMatrix *= translate(1.0f, 0.0f, 0.0f);
-    modelViewMatrix *= rotate(0.0f, 0.0f, (float)elbow);
-    modelViewMatrix *= translate(1.0f, 0.0f, 0.0f);
-    push(modelViewMatrix);
-
-    modelViewMatrix = peek();
-    modelViewMatrix *= scale(2.0f, 0.5f, 1.0f);
-    push(modelViewMatrix);
-
-    // send necessary matrices to shader in respective uniforms
-    modelViewProjectionMatrix = perspectiveProjectionMatrix * peek();
-    glUniformMatrix4fv(mvpUniform, 1, GL_FALSE, modelViewProjectionMatrix);
-
-    // bind with vao (this will avoid many binding to vbo)
-    glBindVertexArray(vao_sphere);
-
-    // draw necessary scene
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 3 * coords);
-
-    // unbind vao
-    glBindVertexArray(0);
-
-    resetStack();
+    //////////////////////////////////////////////////////////////////////////////////////////
 
     // unuse program
     glUseProgram(0);
@@ -531,6 +526,7 @@ int main(int args, const char *argv[])
     
     CGLUnlockContext((CGLContextObj)[[self openGLContext]CGLContextObj]);
 }
+
 
 - (BOOL)acceptsFirstResponder
 {
@@ -550,22 +546,6 @@ int main(int args, const char *argv[])
             [NSApp terminate:self];
             break;
             
-        case 'S':
-            shoulder = (shoulder + 3) % 360;
-            break;
-
-        case 's':
-            shoulder = (shoulder - 3) % 360;
-            break;
-
-        case 'E':
-            elbow = (elbow + 3) % 360;
-            break;
-
-        case 'e':
-            elbow = (elbow - 3) % 360;
-            break;
-            
         case 'F':
         case 'f':
             [[self window]toggleFullScreen:self]; // repainting occurs automatically
@@ -574,6 +554,7 @@ int main(int args, const char *argv[])
         default:
             break;
     }
+
 }
 
 - (void)mouseDown:(NSEvent *)theEvent
@@ -593,115 +574,18 @@ int main(int args, const char *argv[])
     [self setNeedsDisplay:YES]; // repainting
 }
 
-- (int)generateSphereCoords:(GLfloat)r slices:(int)n pos:(GLfloat **)ppos norm:(GLfloat **)pnorm tex:(GLfloat **)ptex
-{
-    int iNoOfCoords = 0;
-    int i, j;
-    GLdouble phi1, phi2, theta, s, t;
-    GLfloat ex, ey, ez, px, py, pz;
-    
-    *ppos  = (GLfloat *)malloc(3 * sizeof(GLfloat) * n * (n + 1) * 2);
-    *pnorm = (GLfloat *)malloc(3 * sizeof(GLfloat) * n * (n + 1) * 2);
-    *ptex  = (GLfloat *)malloc(2 * sizeof(GLfloat) * n * (n + 1) * 2);
-    
-    GLfloat *pos  = *ppos;
-    GLfloat *norm = *pnorm;
-    GLfloat *tex  = *ptex;
-    
-    if (ppos && pnorm && ptex)
-    {
-        //iNoOfCoords = n * (n + 1);
-        
-        for (j = 0; j < n; j++) {
-            phi1 = j * M_PI * 2 / n;
-            phi2 = (j + 1) * M_PI * 2 / n;
-            
-            //fprintf(gpFile, "phi1 [%g]...\n", phi1);
-            //fprintf(gpFile, "phi2 [%g]...\n", phi2);
-            
-            for (i = 0; i <= n; i++) {
-                theta = i * M_PI / n;
-                
-                ex = sin(theta) * cos(phi2);
-                ey = sin(theta) * sin(phi2);
-                ez = cos(theta);
-                px = r * ex;
-                py = r * ey;
-                pz = r * ez;
-                
-                //glNormal3f(ex, ey, ez);
-                norm[(iNoOfCoords*3) + 0] = ex;
-                norm[(iNoOfCoords*3) + 1] = ey;
-                norm[(iNoOfCoords*3) + 2] = ez;
-                
-                s = phi2 / (M_PI * 2);   // column
-                t = 1 - (theta / M_PI);  // row
-                //glTexCoord2f(s, t);
-                tex[(iNoOfCoords*2) + 0] = s;
-                tex[(iNoOfCoords*2) + 1] = t;
-                
-                //glVertex3f(px, py, pz);
-                pos[(iNoOfCoords*3) + 0] = px;
-                pos[(iNoOfCoords*3) + 1] = py;
-                pos[(iNoOfCoords*3) + 2] = pz;
-                
-                /*fprintf(gpFile, "pos[%d]...\n", (iNoOfCoords * 3) + 0);
-                 fprintf(gpFile, "pos[%d]...\n", (iNoOfCoords * 3) + 1);
-                 fprintf(gpFile, "pos[%d]...\n", (iNoOfCoords * 3) + 2);*/
-                
-                ex = sin(theta) * cos(phi1);
-                ey = sin(theta) * sin(phi1);
-                ez = cos(theta);
-                px = r * ex;
-                py = r * ey;
-                pz = r * ez;
-                
-                //glNormal3f(ex, ey, ez);
-                norm[(iNoOfCoords*3) + 3] = ex;
-                norm[(iNoOfCoords*3) + 4] = ey;
-                norm[(iNoOfCoords*3) + 5] = ez;
-                
-                s = phi1 / (M_PI * 2);   // column
-                t = 1 - (theta / M_PI);  // row
-                //glTexCoord2f(s, t);
-                tex[(iNoOfCoords*2) + 2] = s;
-                tex[(iNoOfCoords*2) + 3] = t;
-                
-                //glVertex3f(px, py, pz);
-                pos[(iNoOfCoords*3) + 3] = px;
-                pos[(iNoOfCoords*3) + 4] = py;
-                pos[(iNoOfCoords*3) + 5] = pz;
-                
-                /*fprintf(gpFile, "pos[%d]...\n", (iNoOfCoords * 3) + 3);
-                 fprintf(gpFile, "pos[%d]...\n", (iNoOfCoords * 3) + 4);
-                 fprintf(gpFile, "pos[%d]...\n", (iNoOfCoords * 3) + 5);*/
-                
-                iNoOfCoords += 2;
-            }
-        }
-    }
-    
-    return iNoOfCoords;
-}
-
 - (void) dealloc
 {
-    if (vbo_position_sphere)
+    if (vbo)
     {
-        glDeleteBuffers(1, &vbo_position_sphere);
-        vbo_position_sphere = 0;
+        glDeleteBuffers(1, &vbo);
+        vbo = 0;
     }
-    
-    if (vbo_normal_sphere)
+
+    if (vao)
     {
-        glDeleteBuffers(1, &vbo_normal_sphere);
-        vbo_normal_sphere = 0;
-    }
-    
-    if (vao_sphere)
-    {
-        glDeleteVertexArrays(1, &vao_sphere);
-        vao_sphere = 0;
+        glDeleteVertexArrays(1, &vao);
+        vao = 0;
     }
     
     if (gShaderProgramObject)
