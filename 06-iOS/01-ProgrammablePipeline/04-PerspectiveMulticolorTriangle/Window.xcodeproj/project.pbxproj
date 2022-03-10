@@ -12,7 +12,7 @@
 		4075AED52690D35D001ABEB0 /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4075AED42690D35D001ABEB0 /* ViewController.m */; };
 		4075AEDA2690D35E001ABEB0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4075AED92690D35E001ABEB0 /* Assets.xcassets */; };
 		4075AEE02690D35E001ABEB0 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 4075AEDF2690D35E001ABEB0 /* main.m */; };
-		4075AEE92690DC2A001ABEB0 /* GLESView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4075AEE82690DC2A001ABEB0 /* GLESView.m */; };
+		4075AEE92690DC2A001ABEB0 /* GLESView.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4075AEE82690DC2A001ABEB0 /* GLESView.mm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -26,7 +26,7 @@
 		4075AEDE2690D35E001ABEB0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		4075AEDF2690D35E001ABEB0 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 		4075AEE72690DC2A001ABEB0 /* GLESView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GLESView.h; sourceTree = "<group>"; };
-		4075AEE82690DC2A001ABEB0 /* GLESView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = GLESView.m; sourceTree = "<group>"; };
+		4075AEE82690DC2A001ABEB0 /* GLESView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = GLESView.mm; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -74,7 +74,7 @@
 				4075AED32690D35D001ABEB0 /* ViewController.h */,
 				4075AED42690D35D001ABEB0 /* ViewController.m */,
 				4075AEE72690DC2A001ABEB0 /* GLESView.h */,
-				4075AEE82690DC2A001ABEB0 /* GLESView.m */,
+				4075AEE82690DC2A001ABEB0 /* GLESView.mm */,
 				4075AED92690D35E001ABEB0 /* Assets.xcassets */,
 				4075AEDE2690D35E001ABEB0 /* Info.plist */,
 				4075AEDF2690D35E001ABEB0 /* main.m */,
@@ -158,7 +158,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4075AEE92690DC2A001ABEB0 /* GLESView.m in Sources */,
+				4075AEE92690DC2A001ABEB0 /* GLESView.mm in Sources */,
 				4075AED52690D35D001ABEB0 /* ViewController.m in Sources */,
 				4075AECF2690D35D001ABEB0 /* AppDelegate.m in Sources */,
 				4075AEE02690D35E001ABEB0 /* main.m in Sources */,

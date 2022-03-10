@@ -5,6 +5,16 @@
 
 #import "GLESView.h"
 
+#import "vmath.h"
+using namespace vmath;
+
+enum {
+  RMC_ATTRIBUTE_POSITION = 0,
+  RMC_ATTRIBUTE_COLOR,
+  RMC_ATTRIBUTE_NORMAL,
+  RMC_ATTRIBUTE_TEXTURE,
+};
+
 @implementation GLESView {
  @private
   EAGLContext *eaglContext;
@@ -16,6 +26,20 @@
   id displayLink;
   NSInteger animationFrameInterval;
   BOOL isAnimating;
+
+  ///
+
+  GLuint vertexShaderObject;
+  GLuint fragmentShaderObject;
+  GLuint shaderProgramObject;
+
+  GLuint vao;
+  GLuint vbo;
+  GLuint mvpUniform;
+
+  vmath::mat4 perspectiveProjectionMatrix;
+
+  ///
 }
 
 - (id)initWithFrame:(CGRect)frame {
@@ -23,7 +47,6 @@
   self = [super initWithFrame:frame];
 
   if (self) {
-    
     // create drawable (layer/surface)
     CAEAGLLayer *eaglLayer = (CAEAGLLayer *)[super layer];
     [eaglLayer setOpaque:YES];
@@ -78,14 +101,169 @@
     isAnimating = NO;
 
     // opengles code
-    
+
     // fetch OpenGL related details
     printf("OpenGLES Vendor:   %s\n", glGetString(GL_VENDOR));
     printf("OpenGLES Renderer: %s\n", glGetString(GL_RENDERER));
     printf("OpenGLES Version:  %s\n", glGetString(GL_VERSION));
     printf("GLSL ES  Version:  %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
-    
-    glClearColor(0.0f, 0.0f, 1.0f, 1.0f);
+
+    //////////////////////////////////////////////////////////////////
+
+    // create vertex shader object
+    vertexShaderObject = glCreateShader(GL_VERTEX_SHADER);
+
+    // vertex shader source code
+    const GLchar *vertexShaderSourceCode = (GLchar *)"#version 300 es"
+                                                     "\n"
+                                                     "in vec4 vPosition;"
+                                                     "uniform mat4 u_mvp_matrix;"
+                                                     "void main (void)"
+                                                     "{"
+                                                     "   gl_Position = u_mvp_matrix * vPosition;"
+                                                     "}";
+
+    // attach source code to vertex shader
+    glShaderSource(vertexShaderObject, 1, (const GLchar **)&vertexShaderSourceCode, NULL);
+
+    // compile vertex shader source code
+    glCompileShader(vertexShaderObject);
+
+    // compilation errors
+    GLint iShaderCompileStatus = 0;
+    GLint iInfoLogLength = 0;
+    GLchar *szInfoLog = NULL;
+
+    glGetShaderiv(vertexShaderObject, GL_COMPILE_STATUS, &iShaderCompileStatus);
+    if (iShaderCompileStatus == GL_FALSE) {
+      glGetShaderiv(vertexShaderObject, GL_INFO_LOG_LENGTH, &iInfoLogLength);
+      if (iInfoLogLength > 0) {
+        szInfoLog = (GLchar *)malloc(iInfoLogLength);
+        if (szInfoLog != NULL) {
+          GLsizei written;
+          glGetShaderInfoLog(vertexShaderObject, GL_INFO_LOG_LENGTH, &written, szInfoLog);
+
+          free(szInfoLog);
+          [self release];
+          exit(0);
+        }
+      }
+    }
+
+    // create fragment shader object
+    fragmentShaderObject = glCreateShader(GL_FRAGMENT_SHADER);
+
+    // fragment shader source code
+    const GLchar *fragmentShaderSourceCode = (GLchar *)"#version 300 es"
+                                                       "\n"
+                                                       "precision highp float;"
+                                                       "out vec4 FragColor;"
+                                                       "void main (void)"
+                                                       "{"
+                                                       "   FragColor = vec4(1.0, 1.0, 1.0, 1.0);"
+                                                       "}";
+
+    // attach source code to fragment shader
+    glShaderSource(fragmentShaderObject, 1, (const GLchar **)&fragmentShaderSourceCode, NULL);
+
+    // compile fragment shader source code
+    glCompileShader(fragmentShaderObject);
+
+    // compile errors
+    iShaderCompileStatus = 0;
+    iInfoLogLength = 0;
+    szInfoLog = NULL;
+
+    glGetShaderiv(fragmentShaderObject, GL_COMPILE_STATUS, &iShaderCompileStatus);
+    if (iShaderCompileStatus == GL_FALSE) {
+      glGetShaderiv(fragmentShaderObject, GL_INFO_LOG_LENGTH, &iInfoLogLength);
+      if (iInfoLogLength > 0) {
+        szInfoLog = (GLchar *)malloc(iInfoLogLength);
+        if (szInfoLog != NULL) {
+          GLsizei written;
+          glGetShaderInfoLog(fragmentShaderObject, GL_INFO_LOG_LENGTH, &written, szInfoLog);
+
+          free(szInfoLog);
+          [self release];
+          exit(0);
+        }
+      }
+    }
+
+    // create shader program object
+    shaderProgramObject = glCreateProgram();
+
+    // attach vertex shader to shader program
+    glAttachShader(shaderProgramObject, vertexShaderObject);
+
+    // attach fragment shader to shader program
+    glAttachShader(shaderProgramObject, fragmentShaderObject);
+
+    // pre-linking binding to vertex attribute
+    glBindAttribLocation(shaderProgramObject, RMC_ATTRIBUTE_POSITION, "vPosition");
+
+    // link the shader program
+    glLinkProgram(shaderProgramObject);
+
+    // linking errors
+    GLint iProgramLinkStatus = 0;
+    iInfoLogLength = 0;
+    szInfoLog = NULL;
+
+    glGetProgramiv(shaderProgramObject, GL_LINK_STATUS, &iProgramLinkStatus);
+    if (iProgramLinkStatus == GL_FALSE) {
+      glGetProgramiv(shaderProgramObject, GL_INFO_LOG_LENGTH, &iInfoLogLength);
+      if (iInfoLogLength > 0) {
+        szInfoLog = (GLchar *)malloc(iInfoLogLength);
+        if (szInfoLog != NULL) {
+          GLsizei written;
+          glGetProgramInfoLog(shaderProgramObject, GL_INFO_LOG_LENGTH, &written, szInfoLog);
+
+          free(szInfoLog);
+          [self release];
+          exit(0);
+        }
+      }
+    }
+
+    // post-linking retrieving uniform locations
+    mvpUniform = glGetUniformLocation(shaderProgramObject, "u_mvp_matrix");
+
+    // vertex array
+    const GLfloat triangleVertices[] = {
+      0.0f, 1.0f, 0.0f,//
+      -1.0f, -1.0f, 0.0f, //
+      1.0f, -1.0f, 0.0f //
+    };
+
+    // create vao
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+
+    glGenBuffers(1, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(triangleVertices), triangleVertices, GL_STATIC_DRAW);
+    glVertexAttribPointer(RMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(RMC_ATTRIBUTE_POSITION);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+    //////////////////////////////////////////////////////////////////////
+
+    // clear the depth buffer
+    glClearDepthf(1.0f);
+
+    // clear the screen by OpenGL
+    glClearColor(0.0f, 0.0f, 1.0f, 0.0f);
+
+    // enable depth
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+
+    perspectiveProjectionMatrix = mat4::identity();
+
+    //////////////////////////////////////////////////////////////////
 
     // user input handling (gestures)
     UITapGestureRecognizer *singleTapGestureRecognizer =
@@ -119,6 +297,8 @@
   return (self);
 }
 
+// Only override drawRect: if you perform custom drawing.
+// An empty implementation adversely affects performance during animation.
 //- (void)drawRect:(CGRect)rect {
 //  // Drawing code
 //}
@@ -156,15 +336,52 @@
 
   glViewport(0, 0, (GLsizei)width, (GLsizei)height);
 
+  perspectiveProjectionMatrix = perspective(45.0f, (float)width / (float)height, 0.1f, 100.0f);
+
   [self drawView:nil];
 }
 
 - (void)drawView:(id)sender {
   // code
   [EAGLContext setCurrentContext:eaglContext];
+
   glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebuffer);
 
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+  // use shader program
+  glUseProgram(shaderProgramObject);
+
+  // declaration of matrices
+  mat4 modelViewMatrix;
+  mat4 modelViewProjectionMatrix;
+
+  // intialize above matrices to identity
+  modelViewMatrix = mat4::identity();
+  modelViewProjectionMatrix = mat4::identity();
+
+  // transformations
+  modelViewMatrix = translate(0.0f, 0.0f, -3.0f);
+
+  // do necessary matrix multiplication
+  modelViewProjectionMatrix = perspectiveProjectionMatrix * modelViewMatrix;
+
+  // send necessary matrices to shader in respective uniforms
+  glUniformMatrix4fv(mvpUniform, 1, GL_FALSE, modelViewProjectionMatrix);
+
+  // bind with vao (this will avoid many binding to vbo)
+  glBindVertexArray(vao);
+
+  // bind with textures
+
+  // draw necessary scene
+  glDrawArrays(GL_TRIANGLES, 0, 3);
+
+  // unbind vao
+  glBindVertexArray(0);
+
+  // unuse program
+  glUseProgram(0);
 
   glBindRenderbuffer(GL_RENDERBUFFER, colorRenderbuffer);
   [eaglContext presentRenderbuffer:GL_RENDERBUFFER];
