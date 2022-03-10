@@ -29,11 +29,11 @@ enum {
 
   ///
 
- GLuint gShaderProgramObject;
+  GLuint gShaderProgramObject;
   GLuint vertexShaderObject;
   GLuint fragmentShaderObject;
 
-  GLuint vaoRectangle;           // vertex array object
+  GLuint vaoRectangle;          // vertex array object
   GLuint vboRectanglePosition;  // vertex buffer object
   GLuint mvpUniform;
 

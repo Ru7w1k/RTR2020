@@ -29,12 +29,12 @@ enum {
 
   ///
 
- GLuint gShaderProgramObject;
+  GLuint gShaderProgramObject;
   GLuint vertexShaderObject;
   GLuint fragmentShaderObject;
 
-  GLuint vaoTriangle;            // vertex array object
-  GLuint vaoRectangle;           // vertex array object
+  GLuint vaoTriangle;           // vertex array object
+  GLuint vaoRectangle;          // vertex array object
   GLuint vboTrianglePosition;   // vertex buffer object
   GLuint vboRectanglePosition;  // vertex buffer object
   GLuint vboTriangleColor;

@@ -29,16 +29,21 @@ enum {
 
   ///
 
+  GLuint gShaderProgramObject;
   GLuint vertexShaderObject;
   GLuint fragmentShaderObject;
-  GLuint shaderProgramObject;
 
-  GLuint vao;
-  GLuint vbo;
+  GLuint vaoTriangle;           // vertex array object
+  GLuint vaoRectangle;          // vertex array object
+  GLuint vboTrianglePosition;   // vertex buffer object
+  GLuint vboRectanglePosition;  // vertex buffer object
+  GLuint vboTriangleColor;
   GLuint mvpUniform;
 
   vmath::mat4 perspectiveProjectionMatrix;
 
+  GLfloat angleTriangle;
+  GLfloat angleRectangle;
   ///
 }
 
@@ -117,10 +122,13 @@ enum {
     const GLchar *vertexShaderSourceCode = (GLchar *)"#version 300 es"
                                                      "\n"
                                                      "in vec4 vPosition;"
+                                                     "in vec4 vColor;"
                                                      "uniform mat4 u_mvp_matrix;"
+                                                     "out vec4 out_Color;"
                                                      "void main (void)"
                                                      "{"
-                                                     "   gl_Position = u_mvp_matrix * vPosition;"
+                                                     "    gl_Position = u_mvp_matrix * vPosition;"
+                                                     "    out_Color = vColor;"
                                                      "}";
 
     // attach source code to vertex shader
@@ -157,10 +165,11 @@ enum {
     const GLchar *fragmentShaderSourceCode = (GLchar *)"#version 300 es"
                                                        "\n"
                                                        "precision highp float;"
+                                                       "in vec4 out_Color;"
                                                        "out vec4 FragColor;"
                                                        "void main (void)"
                                                        "{"
-                                                       "   FragColor = vec4(1.0, 1.0, 1.0, 1.0);"
+                                                       "    FragColor = out_Color;"
                                                        "}";
 
     // attach source code to fragment shader
@@ -191,33 +200,34 @@ enum {
     }
 
     // create shader program object
-    shaderProgramObject = glCreateProgram();
+    gShaderProgramObject = glCreateProgram();
 
     // attach vertex shader to shader program
-    glAttachShader(shaderProgramObject, vertexShaderObject);
+    glAttachShader(gShaderProgramObject, vertexShaderObject);
 
     // attach fragment shader to shader program
-    glAttachShader(shaderProgramObject, fragmentShaderObject);
+    glAttachShader(gShaderProgramObject, fragmentShaderObject);
 
     // pre-linking binding to vertex attribute
-    glBindAttribLocation(shaderProgramObject, RMC_ATTRIBUTE_POSITION, "vPosition");
+    glBindAttribLocation(gShaderProgramObject, RMC_ATTRIBUTE_POSITION, "vPosition");
+    glBindAttribLocation(gShaderProgramObject, RMC_ATTRIBUTE_COLOR, "vColor");
 
     // link the shader program
-    glLinkProgram(shaderProgramObject);
+    glLinkProgram(gShaderProgramObject);
 
     // linking errors
     GLint iProgramLinkStatus = 0;
     iInfoLogLength = 0;
     szInfoLog = NULL;
 
-    glGetProgramiv(shaderProgramObject, GL_LINK_STATUS, &iProgramLinkStatus);
+    glGetProgramiv(gShaderProgramObject, GL_LINK_STATUS, &iProgramLinkStatus);
     if (iProgramLinkStatus == GL_FALSE) {
-      glGetProgramiv(shaderProgramObject, GL_INFO_LOG_LENGTH, &iInfoLogLength);
+      glGetProgramiv(gShaderProgramObject, GL_INFO_LOG_LENGTH, &iInfoLogLength);
       if (iInfoLogLength > 0) {
         szInfoLog = (GLchar *)malloc(iInfoLogLength);
         if (szInfoLog != NULL) {
           GLsizei written;
-          glGetProgramInfoLog(shaderProgramObject, GL_INFO_LOG_LENGTH, &written, szInfoLog);
+          glGetProgramInfoLog(gShaderProgramObject, GL_INFO_LOG_LENGTH, &written, szInfoLog);
 
           free(szInfoLog);
           [self release];
@@ -227,24 +237,56 @@ enum {
     }
 
     // post-linking retrieving uniform locations
-    mvpUniform = glGetUniformLocation(shaderProgramObject, "u_mvp_matrix");
+    mvpUniform = glGetUniformLocation(gShaderProgramObject, "u_mvp_matrix");
 
     // vertex array
-    const GLfloat triangleVertices[] = {
-        0.0f,  1.0f,  0.0f,  //
-        -1.0f, -1.0f, 0.0f,  //
-        1.0f,  -1.0f, 0.0f   //
+    const GLfloat triangleVertices[] = {0.0f, 1.0f, 0.0f, -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f};
+
+    const GLfloat rectangleVertices[] = {
+        1.0f, 1.0f, 0.0f, -1.0f, 1.0f, 0.0f, -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f,
     };
 
-    // create vao
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
+    const GLfloat triangleColors[] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
 
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    // create vao
+    glGenVertexArrays(1, &vaoTriangle);
+    glBindVertexArray(vaoTriangle);
+
+    // vertex positions
+    glGenBuffers(1, &vboTrianglePosition);
+    glBindBuffer(GL_ARRAY_BUFFER, vboTrianglePosition);
     glBufferData(GL_ARRAY_BUFFER, sizeof(triangleVertices), triangleVertices, GL_STATIC_DRAW);
     glVertexAttribPointer(RMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
     glEnableVertexAttribArray(RMC_ATTRIBUTE_POSITION);
+
+    // vertex color
+    glGenBuffers(1, &vboTriangleColor);
+    glBindBuffer(GL_ARRAY_BUFFER, vboTriangleColor);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(triangleColors), triangleColors, GL_STATIC_DRAW);
+    glVertexAttribPointer(RMC_ATTRIBUTE_COLOR, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(RMC_ATTRIBUTE_COLOR);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+    // create vao
+    glGenVertexArrays(1, &vaoRectangle);
+    glBindVertexArray(vaoRectangle);
+
+    // vertex positions
+    glGenBuffers(1, &vboRectanglePosition);
+    glBindBuffer(GL_ARRAY_BUFFER, vboRectanglePosition);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(rectangleVertices), rectangleVertices, GL_STATIC_DRAW);
+    glVertexAttribPointer(RMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(RMC_ATTRIBUTE_POSITION);
+
+    //// vertex color
+    // glGenBuffers(1, &vbo_color_rectangle);
+    // glBindBuffer(GL_ARRAY_BUFFER, vbo_color_rectangle);
+    // glBufferData(GL_ARRAY_BUFFER, sizeof(rectangleColors), rectangleColors, GL_STATIC_DRAW);
+    // glVertexAttribPointer(RMC_ATTRIBUTE_COLOR, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    // glEnableVertexAttribArray(RMC_ATTRIBUTE_COLOR);
+    glVertexAttrib3f(RMC_ATTRIBUTE_COLOR, 0.0f, 0.0f, 1.0f);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
@@ -255,7 +297,7 @@ enum {
     glClearDepthf(1.0f);
 
     // clear the screen by OpenGL
-    glClearColor(0.0f, 0.0f, 1.0f, 0.0f);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
     // enable depth
     glEnable(GL_DEPTH_TEST);
@@ -347,21 +389,30 @@ enum {
 
   glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebuffer);
 
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   // use shader program
-  glUseProgram(shaderProgramObject);
+  glUseProgram(gShaderProgramObject);
 
   // declaration of matrices
+  mat4 translationMatrix;
+  mat4 rotationMatrix;
   mat4 modelViewMatrix;
   mat4 modelViewProjectionMatrix;
 
+  ///// TRIANGLE ///////////////////////////////////////////////////////////////////////////
+
   // intialize above matrices to identity
+  translationMatrix = mat4::identity();
+  rotationMatrix = mat4::identity();
   modelViewMatrix = mat4::identity();
   modelViewProjectionMatrix = mat4::identity();
 
-  // transformations
-  modelViewMatrix = translate(0.0f, 0.0f, -3.0f);
+  // perform necessary transformations
+  translationMatrix = translate(-1.5f, 0.0f, -6.0f);
+  rotationMatrix = rotate(angleTriangle, 0.0f, 1.0f, 0.0f);
+  modelViewMatrix *= translationMatrix;
+  modelViewMatrix *= rotationMatrix;
 
   // do necessary matrix multiplication
   modelViewProjectionMatrix = perspectiveProjectionMatrix * modelViewMatrix;
@@ -369,8 +420,8 @@ enum {
   // send necessary matrices to shader in respective uniforms
   glUniformMatrix4fv(mvpUniform, 1, GL_FALSE, modelViewProjectionMatrix);
 
-  // bind with vao (this will avoid many binding to vbo)
-  glBindVertexArray(vao);
+  // bind with vao (this will avoid many binding to vbo_vertex)
+  glBindVertexArray(vaoTriangle);
 
   // bind with textures
 
@@ -380,11 +431,62 @@ enum {
   // unbind vao
   glBindVertexArray(0);
 
+  //////////////////////////////////////////////////////////////////////////////////////////
+
+  ///// RECTANGLE   ////////////////////////////////////////////////////////////////////////
+
+  // intialize above matrices to identity
+  translationMatrix = mat4::identity();
+  rotationMatrix = mat4::identity();
+  modelViewMatrix = mat4::identity();
+  modelViewProjectionMatrix = mat4::identity();
+
+  // perform necessary transformations
+  translationMatrix = translate(1.5f, 0.0f, -6.0f);
+  rotationMatrix = rotate(angleRectangle, 1.0f, 0.0f, 0.0f);
+  modelViewMatrix *= translationMatrix;
+  modelViewMatrix *= rotationMatrix;
+
+  // do necessary matrix multiplication
+  modelViewProjectionMatrix = perspectiveProjectionMatrix * modelViewMatrix;
+
+  // send necessary matrices to shader in respective uniforms
+  glUniformMatrix4fv(mvpUniform, 1, GL_FALSE, modelViewProjectionMatrix);
+
+  // bind with vao (this will avoid many binding to vbo_vertex)
+  glBindVertexArray(vaoRectangle);
+
+  // bind with textures
+
+  // draw necessary scene
+  glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+
+  // unbind vao
+  glBindVertexArray(0);
+
+  //////////////////////////////////////////////////////////////////////////////////////////
+
   // unuse program
   glUseProgram(0);
 
+  [self update];
+
   glBindRenderbuffer(GL_RENDERBUFFER, colorRenderbuffer);
   [eaglContext presentRenderbuffer:GL_RENDERBUFFER];
+}
+
+- (void)update {
+  if (angleTriangle >= 360.0) {
+    angleTriangle = 0.0;
+  } else {
+    angleTriangle += 1.0f;
+  }
+
+  if (angleRectangle >= 360.0) {
+    angleRectangle = 0.0;
+  } else {
+    angleRectangle += 1.0f;
+  }
 }
 
 - (void)startAnimation {

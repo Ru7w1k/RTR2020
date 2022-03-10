@@ -23,7 +23,6 @@
   self = [super initWithFrame:frame];
 
   if (self) {
-    
     // create drawable (layer/surface)
     CAEAGLLayer *eaglLayer = (CAEAGLLayer *)[super layer];
     [eaglLayer setOpaque:YES];
@@ -78,13 +77,13 @@
     isAnimating = NO;
 
     // opengles code
-    
+
     // fetch OpenGL related details
     printf("OpenGLES Vendor:   %s\n", glGetString(GL_VENDOR));
     printf("OpenGLES Renderer: %s\n", glGetString(GL_RENDERER));
     printf("OpenGLES Version:  %s\n", glGetString(GL_VERSION));
     printf("GLSL ES  Version:  %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
-    
+
     glClearColor(0.0f, 0.0f, 1.0f, 1.0f);
 
     // user input handling (gestures)
