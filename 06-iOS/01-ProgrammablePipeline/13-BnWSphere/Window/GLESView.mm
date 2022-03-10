@@ -1,9 +1,4 @@
-//
-//  GLESView.m
-//  BlueScreen
-//
-//  Created by Rutwik Choughule on 21/12/19.
-//
+
 
 #import <OpenGLES/ES3/gl.h>
 #import <OpenGLES/ES3/glext.h>
@@ -15,10 +10,10 @@
 using namespace vmath;
 
 enum {
-  AMC_ATTRIBUTE_POSITION = 0,
-  AMC_ATTRIBUTE_COLOR,
-  AMC_ATTRIBUTE_NORMAL,
-  AMC_ATTRIBUTE_TEXTURE0,
+  RMC_ATTRIBUTE_POSITION = 0,
+  RMC_ATTRIBUTE_COLOR,
+  RMC_ATTRIBUTE_NORMAL,
+  RMC_ATTRIBUTE_TEXTURE0,
 
 };
 
@@ -216,7 +211,7 @@ enum {
     glAttachShader(gShaderProgramObject, fragmentShaderObject);
 
     // pre-linking binding to vertex attribute
-    glBindAttribLocation(gShaderProgramObject, AMC_ATTRIBUTE_POSITION, "vPosition");
+    glBindAttribLocation(gShaderProgramObject, RMC_ATTRIBUTE_POSITION, "vPosition");
 
     // link the shader program
     glLinkProgram(gShaderProgramObject);
@@ -268,15 +263,15 @@ enum {
     glGenBuffers(1, &vbo_position_sphere);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_position_sphere);
     glBufferData(GL_ARRAY_BUFFER, 3 * coords * sizeof(GLfloat), sphereVertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_POSITION);
+    glVertexAttribPointer(RMC_ATTRIBUTE_POSITION, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(RMC_ATTRIBUTE_POSITION);
 
     // vertex normals
     glGenBuffers(1, &vbo_normal_sphere);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_normal_sphere);
     glBufferData(GL_ARRAY_BUFFER, 3 * coords * sizeof(GLfloat), sphereNormals, GL_STATIC_DRAW);
-    glVertexAttribPointer(AMC_ATTRIBUTE_NORMAL, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(AMC_ATTRIBUTE_NORMAL);
+    glVertexAttribPointer(RMC_ATTRIBUTE_NORMAL, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(RMC_ATTRIBUTE_NORMAL);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
