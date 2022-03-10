@@ -15,7 +15,7 @@ enum {
   RMC_ATTRIBUTE_POSITION = 0,
   RMC_ATTRIBUTE_COLOR,
   RMC_ATTRIBUTE_NORMAL,
-  RMC_ATTRIBUTE_TEXTURE0,
+  RMC_ATTRIBUTE_TEXCOORD,
 
 };
 
@@ -207,7 +207,7 @@ enum {
 
     // pre-linking binding to vertex attribute
     glBindAttribLocation(shaderProgramObject, RMC_ATTRIBUTE_POSITION, "vPosition");
-    glBindAttribLocation(shaderProgramObject, RMC_ATTRIBUTE_TEXTURE0, "vTexcoord");
+    glBindAttribLocation(shaderProgramObject, RMC_ATTRIBUTE_TEXCOORD, "vTexcoord");
 
     // link the shader program
     glLinkProgram(shaderProgramObject);
@@ -260,8 +260,8 @@ enum {
     glGenBuffers(1, &vbo_texture);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_texture);
     glBufferData(GL_ARRAY_BUFFER, sizeof(quadsTexcoords), quadsTexcoords, GL_STATIC_DRAW);
-    glVertexAttribPointer(RMC_ATTRIBUTE_TEXTURE0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
-    glEnableVertexAttribArray(RMC_ATTRIBUTE_TEXTURE0);
+    glVertexAttribPointer(RMC_ATTRIBUTE_TEXCOORD, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(RMC_ATTRIBUTE_TEXCOORD);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
